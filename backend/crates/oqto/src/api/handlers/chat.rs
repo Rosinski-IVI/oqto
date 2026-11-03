@@ -19,7 +19,8 @@ use tracing::{debug, info, instrument};
 use crate::auth::CurrentUser;
 use crate::history::{ChatMessage, ChatSession};
 use crate::runner::router::{
-    ExecutionTarget, resolve_runner_for_read_target, resolve_runner_for_target,
+    ExecutionTarget, personal_runner_client, resolve_runner_for_read_target,
+    resolve_runner_for_target,
 };
 use crate::session_target::{SessionTargetRecord, SessionTargetScope};
 
@@ -259,18 +260,7 @@ pub(crate) fn get_runner_for_user(
     state: &AppState,
     user_id: &str,
 ) -> Option<oqto_runner::client::RunnerClient> {
-    // The socket path uses the linux_username (e.g., oqto_hansgerd-vyon),
-    // not the platform user_id (e.g., hansgerd-vYoN).
-    let effective_user = state.effective_linux_username(user_id);
-
-    let client_result = if state.user_isolation_enabled() {
-        let pattern = state.runner_socket_pattern.as_ref()?;
-        oqto_runner::client::RunnerClient::for_user_with_pattern(&effective_user, pattern)
-    } else {
-        oqto_runner::client::RunnerClient::for_user(&effective_user)
-    };
-
-    match client_result {
+    match personal_runner_client(state, user_id) {
         Ok(client) => Some(client),
         Err(e) => {
             tracing::warn!(

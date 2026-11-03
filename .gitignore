@@ -81,3 +81,6 @@ node_modules/
 
 # trx ledger lives in the central store
 /.trx/
+
+# Local Docker environment may contain provider credentials.
+deploy/docker/.env

@@ -29,6 +29,9 @@ services:
       - AZURE_API_KEY=${AZURE_API_KEY:-}
       - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
       - MISTRAL_API_KEY=${MISTRAL_API_KEY:-}
+      - FHGENIE_API_KEY=${FHGENIE_API_KEY:-}
+      - FHGENIE_BASE_URL=${FHGENIE_BASE_URL:-}
+      - FHGENIE_MODEL=${FHGENIE_MODEL:-}
 
       # --- Local LLM (any OpenAI-compatible server) ---
       - LOCAL_LLM_URL=${LOCAL_LLM_URL:-}

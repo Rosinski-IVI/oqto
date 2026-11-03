@@ -52,6 +52,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /out
 RUN mkdir -p /out/bin /out/frontend /out/lib
+COPY dependencies.toml /tmp/dependencies.toml
 
 SHELL ["/bin/bash", "-c"]
 
@@ -65,6 +66,8 @@ RUN set -eux; \
     esac; \
     \
     GH="https://github.com/byteowlz"; \
+    EAVS_VERSION=$(sed -n '/^\[byteowlz\]/,/^\[/{s/^eavs = "\([^"]*\)".*/\1/p}' /tmp/dependencies.toml); \
+    test -n "$EAVS_VERSION"; \
     tag() { curl -fsS -o /dev/null -w '%{redirect_url}' "$1/releases/latest" | grep -o '[^/]*$'; }; \
     \
     # ================================================================== \
@@ -83,13 +86,15 @@ RUN set -eux; \
       | tar xz --strip-components=2 -C /out/frontend/; \
     \
     # ================================================================== \
-    # Byteowlz Rust tools (tarballs contain binaries at root level) \
+    # Byteowlz Rust tools (EAVS nests its binary under <release>/bin/) \
     # ================================================================== \
     for repo in eavs agntz mmry tmpltr sldr ignr trx; do \
       echo "--- Downloading $repo ---"; \
-      TAG=$(tag "$GH/$repo"); \
+      if [ "$repo" = "eavs" ]; then TAG="v${EAVS_VERSION}"; else TAG=$(tag "$GH/$repo"); fi; \
+      STRIP_COMPONENTS=0; \
+      if [ "$repo" = "eavs" ]; then STRIP_COMPONENTS=2; fi; \
       curl -fsSL "$GH/$repo/releases/download/${TAG}/${repo}-${TAG}-${RUST_TARGET}.tar.gz" \
-        | tar xz -C /out/bin/ \
+        | tar xz --strip-components="$STRIP_COMPONENTS" -C /out/bin/ \
       || echo "WARN: $repo download failed (may not have ${RUST_TARGET} build)"; \
     done; \
     \

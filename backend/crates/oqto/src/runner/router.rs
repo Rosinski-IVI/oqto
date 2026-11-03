@@ -373,28 +373,41 @@ fn resolve_linux_uid(linux_user: &str) -> Result<u32> {
     Ok(uid)
 }
 
+pub(crate) fn personal_runner_client(state: &AppState, user_id: &str) -> Result<RunnerClient> {
+    let effective_user = state.effective_linux_username(user_id);
+    personal_runner_client_for_user(
+        &effective_user,
+        state.user_isolation_enabled(),
+        state.runner_socket_pattern.as_deref(),
+    )
+}
+
+fn personal_runner_client_for_user(
+    effective_user: &str,
+    isolated: bool,
+    socket_pattern: Option<&str>,
+) -> Result<RunnerClient> {
+    if let Some(pattern) = socket_pattern {
+        return RunnerClient::for_user_with_pattern(effective_user, pattern)
+            .with_context(|| format!("creating runner client for linux user {}", effective_user));
+    }
+
+    if isolated {
+        anyhow::bail!("runner socket pattern not configured");
+    }
+
+    RunnerClient::for_user(effective_user).with_context(|| {
+        format!(
+            "creating local runner client for linux user {}",
+            effective_user
+        )
+    })
+}
+
 async fn resolve_personal_runner(state: &AppState, user_id: &str) -> Result<Option<RunnerClient>> {
     let effective_user = state.effective_linux_username(user_id);
-
-    let client = if state.linux_users.is_none() {
-        RunnerClient::for_user(&effective_user).with_context(|| {
-            format!(
-                "creating local runner client for linux user {}",
-                effective_user
-            )
-        })?
-    } else {
-        let pattern = state
-            .runner_socket_pattern
-            .as_ref()
-            .ok_or_else(|| anyhow::anyhow!("runner socket pattern not configured"))?;
-        RunnerClient::for_user_with_pattern(&effective_user, pattern)
-            .with_context(|| format!("creating runner client for linux user {}", effective_user))?
-    };
-
-    Ok(Some(
-        ensure_runner_healthy(state, &effective_user, client).await?,
-    ))
+    let client = personal_runner_client(state, user_id)?;
+    Ok(Some(ensure_runner_healthy(state, &effective_user, client).await?))
 }
 
 pub async fn resolve_target_for_workspace_path(
@@ -494,6 +507,21 @@ mod tests {
         assert!(translate_exposed_socket(Path::new("/"), Path::new("/run/oqto/x.sock")).is_err());
         assert!(
             translate_exposed_socket(Path::new("/run/oqto/runner.sock"), Path::new("/")).is_err()
+        );
+    }
+
+    #[test]
+    fn personal_runner_uses_configured_socket_without_user_isolation() {
+        let client = personal_runner_client_for_user(
+            "oqto",
+            false,
+            Some("/run/oqto/oqto-runner.sock"),
+        )
+        .unwrap();
+
+        assert_eq!(
+            client.unix_socket_path(),
+            Some(Path::new("/run/oqto/oqto-runner.sock"))
         );
     }
 }

@@ -164,6 +164,7 @@ EOF
 [ -n "${AZURE_API_KEY:-}" ]        && echo "AZURE_API_KEY=${AZURE_API_KEY}" >> "$EAVS_ENV_FILE"
 [ -n "${DEEPSEEK_API_KEY:-}" ]     && echo "DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}" >> "$EAVS_ENV_FILE"
 [ -n "${MISTRAL_API_KEY:-}" ]      && echo "MISTRAL_API_KEY=${MISTRAL_API_KEY}" >> "$EAVS_ENV_FILE"
+[ -n "${FHGENIE_API_KEY:-}" ]      && echo "FHGENIE_API_KEY=${FHGENIE_API_KEY}" >> "$EAVS_ENV_FILE"
 
 chmod 600 "$EAVS_ENV_FILE"
 
@@ -176,6 +177,11 @@ port = ${EAVS_PORT}
 
 [admin]
 api_key = "${EAVS_ADMIN_KEY}"
+
+[keys]
+enabled = true
+database_path = "${OQTO_DATA_DIR}/eavs/keys.db"
+master_key = "${EAVS_ADMIN_KEY}"
 EOF
 
 if [ -n "${ANTHROPIC_API_KEY:-}" ]; then
@@ -212,6 +218,21 @@ if [ -n "${OPENROUTER_API_KEY:-}" ]; then
 type = "openai"
 api_key = "env:OPENROUTER_API_KEY"
 base_url = "https://openrouter.ai/api/v1"
+EOF
+fi
+
+if [ -n "${FHGENIE_API_KEY:-}" ]; then
+  cat >> "$EAVS_CONFIG_FILE" <<EOF
+
+[providers.fhgenie]
+type = "openai-compatible"
+api_key = "env:FHGENIE_API_KEY"
+base_url = "${FHGENIE_BASE_URL:-https://fhgenie.fraunhofer.de/v1}"
+
+[[providers.fhgenie.models]]
+id = "${FHGENIE_MODEL:-nvidia/GLM-5.3-NVFP4}"
+name = "GLM 5.3"
+reasoning = true
 EOF
 fi
 
@@ -385,11 +406,121 @@ set +a
 su -s /bin/bash oqto -c "
   export HOME=/home/oqto
   export XDG_CONFIG_HOME=/home/oqto/.config
-  $(env | grep -E '^(ANTHROPIC|OPENAI|GEMINI|OPENROUTER|AZURE|DEEPSEEK|MISTRAL|EAVS_)' | sed 's/^/export /')
+  export XDG_DATA_HOME=${OQTO_DATA_DIR}
+  $(env | grep -E '^(ANTHROPIC|OPENAI|GEMINI|OPENROUTER|AZURE|DEEPSEEK|MISTRAL|FHGENIE|EAVS_)' | sed 's/^/export /')
   eavs serve --port ${EAVS_PORT} --host 127.0.0.1 2>&1 | sed 's/^/[eavs] /'
 " &
 PIDS+=($!)
 wait_for_port "$EAVS_PORT" "eavs" 15
+EAVS_BASE_URL="http://127.0.0.1:${EAVS_PORT}"
+
+# Pi discovers available models from its models.json, not directly from EAVS.
+# Keep EAVS keys in the persistent volume so the embedded Pi key stays valid.
+EAVS_PI_KEY_FILE="${OQTO_DATA_DIR}/eavs/.pi_api_key"
+EAVS_PI_KEY_ID_FILE="${OQTO_DATA_DIR}/eavs/.pi_api_key_id"
+EAVS_PI_KEY=""
+if [ -s "$EAVS_PI_KEY_FILE" ] && [ -s "$EAVS_PI_KEY_ID_FILE" ]; then
+  EAVS_PI_KEY_ID=$(cat "$EAVS_PI_KEY_ID_FILE")
+  if curl -fsS -o /dev/null \
+    -H "Authorization: Bearer ${EAVS_ADMIN_KEY}" \
+    "${EAVS_BASE_URL}/admin/keys/${EAVS_PI_KEY_ID}"; then
+    EAVS_PI_KEY=$(cat "$EAVS_PI_KEY_FILE")
+  fi
+fi
+
+if [ -z "$EAVS_PI_KEY" ]; then
+  log "Creating EAVS key for Pi..."
+  EAVS_PI_KEY_RESPONSE=$(curl -fsS -X POST \
+    -H "Authorization: Bearer ${EAVS_ADMIN_KEY}" \
+    -H "Content-Type: application/json" \
+    --data '{"name":"oqto-docker"}' \
+    "${EAVS_BASE_URL}/admin/keys")
+  EAVS_PI_KEY=$(printf '%s' "$EAVS_PI_KEY_RESPONSE" | jq -er '.key')
+  EAVS_PI_KEY_ID=$(printf '%s' "$EAVS_PI_KEY_RESPONSE" | jq -er '.key_id')
+  unset EAVS_PI_KEY_RESPONSE
+  printf '%s\n' "$EAVS_PI_KEY" > "$EAVS_PI_KEY_FILE"
+  printf '%s\n' "$EAVS_PI_KEY_ID" > "$EAVS_PI_KEY_ID_FILE"
+  chmod 600 "$EAVS_PI_KEY_FILE"
+  chmod 600 "$EAVS_PI_KEY_ID_FILE"
+  chown oqto:oqto "$EAVS_PI_KEY_FILE" "$EAVS_PI_KEY_ID_FILE"
+fi
+
+PI_AGENT_DIR="/home/oqto/.pi/agent"
+PI_MODELS_FILE="${PI_AGENT_DIR}/models.json"
+PI_MODELS_TEMP="${PI_MODELS_FILE}.tmp"
+mkdir -p "$PI_AGENT_DIR"
+chown oqto:oqto "$PI_AGENT_DIR"
+
+if ! curl -fsS "${EAVS_BASE_URL}/providers/detail" \
+  | EAVS_PI_KEY="$EAVS_PI_KEY" jq --arg base_url "$EAVS_BASE_URL" '
+    def pi_model:
+      {
+        id: .id,
+        name: (if (.name // "") == "" then .id else .name end),
+        reasoning: (.reasoning // false),
+        input: ((.input // []) | if length == 0 then ["text"] else . end),
+        contextWindow: (.context_window // 0),
+        maxTokens: (.max_tokens // 0),
+        cost: {
+          input: (.cost.input // 0),
+          output: (.cost.output // 0),
+          cacheRead: (.cost.cache_read // 0),
+          cacheWrite: (.cost.input // 0)
+        }
+      }
+      + (if ((.compat // {}) | length) > 0 then {compat: .compat} else {} end);
+
+    {
+      providers: (
+        [
+          .[]
+          | select(.name != "default" and (.pi_api | type) == "string")
+          | {
+              key: ("eavs-" + .name),
+              value: (
+                {
+                  baseUrl: ($base_url + "/" + .name + "/v1"),
+                  api: .pi_api,
+                  apiKey: env.EAVS_PI_KEY,
+                  models: [.models[]? | pi_model]
+                }
+                + (if ((.headers // {}) | length) > 0 then {headers: .headers} else {} end)
+              )
+            }
+        ]
+        | from_entries
+      )
+    }
+  ' > "$PI_MODELS_TEMP"; then
+  rm -f "$PI_MODELS_TEMP"
+  log_error "Failed to generate Pi models.json from EAVS"
+  exit 1
+fi
+
+mv "$PI_MODELS_TEMP" "$PI_MODELS_FILE"
+chmod 600 "$PI_MODELS_FILE"
+chown oqto:oqto "$PI_MODELS_FILE"
+
+PI_MODEL_COUNT=$(jq '[.providers[]?.models[]?] | length' "$PI_MODELS_FILE")
+if [ "$PI_MODEL_COUNT" -gt 0 ]; then
+  PI_SETTINGS_FILE="${PI_AGENT_DIR}/settings.json"
+  if [ ! -f "$PI_SETTINGS_FILE" ]; then
+    PI_DEFAULT_SETTINGS=$(jq -c '
+      [.providers | to_entries[]
+        | select((.value.models // [] | length) > 0)
+        | {defaultProvider: .key, defaultModel: .value.models[0].id}]
+      | .[0] // empty
+    ' "$PI_MODELS_FILE")
+    if [ -n "$PI_DEFAULT_SETTINGS" ]; then
+      printf '%s\n' "$PI_DEFAULT_SETTINGS" > "$PI_SETTINGS_FILE"
+      chmod 600 "$PI_SETTINGS_FILE"
+      chown oqto:oqto "$PI_SETTINGS_FILE"
+    fi
+  fi
+  log "Pi model registry ready (${PI_MODEL_COUNT} model(s))"
+else
+  log_error "EAVS returned no Pi-compatible models"
+fi
 
 # Memory is embedded mmry-core (ADR-0010); no mmry daemon is started.
 
@@ -403,6 +534,9 @@ if [ "$OQTO_SINGLE_USER" = "true" ]; then
   " &
   PIDS+=($!)
   wait_for_socket "/run/oqto/oqto-runner.sock" "oqto-runner" 20
+  RUNNER_UID=$(id -u oqto)
+  install -d -m 0700 -o oqto -g oqto "/run/user/${RUNNER_UID}"
+  ln -sfn /run/oqto/oqto-runner.sock "/run/user/${RUNNER_UID}/oqto-runner.sock"
 fi
 
 # 5. oqto backend

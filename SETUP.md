@@ -19,11 +19,25 @@ Comprehensive setup and installation guide for self-hosting Oqto on your own inf
 
 ## Overview
 
-Oqto is a self-hosted AI agent workspace platform. This guide covers prerequisites and installation for Linux local/native deployments. Container setup is currently disabled in `setup.sh` until it is fully finished and tested.
+Oqto is a self-hosted AI agent workspace platform. The native `setup.sh` path installs Oqto on a Linux host; its legacy container backend is currently disabled. For a Docker-only deployment that does not install Oqto dependencies on the host, use the Compose workflow below.
 
 > Note: macOS setup is currently not supported.
 
 ## Quick Start
+
+### Docker Compose (no Oqto host install)
+
+The host needs Docker Engine and the Docker Compose plugin. The existing Compose file builds and runs the all-in-one image; Oqto, its runtime dependencies, configuration, and first-run setup all run inside the container. Persistent data stays in a Docker-managed volume.
+
+```bash
+cd deploy/docker
+cp .env.example .env
+# Edit .env and set an LLM provider API key.
+docker compose up --build -d
+docker compose logs -f oqto
+```
+
+Open <http://localhost:8080>. If `ADMIN_PASSWORD` is left empty, the first-run password is generated and printed once in the logs. From `deploy/docker`, stop Oqto with `docker compose down`; its data remains in the `oqto-data` volume. This workflow does not run `./setup.sh`, which is the native host installer.
 
 ### Bootstrap install (fresh machine, no repo clone)
 
