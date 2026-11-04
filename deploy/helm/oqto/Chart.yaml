@@ -1,0 +1,6 @@
+apiVersion: v2
+name: oqto
+description: Oqto all-in-one AI agent workspace
+type: application
+version: 0.1.0
+appVersion: "latest"

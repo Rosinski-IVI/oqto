@@ -1,0 +1,82 @@
+replicaCount: 1
+
+image:
+  repository: ghcr.io/byteowlz/oqto
+  pullPolicy: IfNotPresent
+  tag: latest
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+service:
+  type: ClusterIP
+  port: 8080
+  annotations: {}
+
+env:
+  OQTO_PORT: "8080"
+  OQTO_HOST_PORT: "8080"
+  OQTO_DATA_DIR: /data
+  OQTO_SINGLE_USER: "true"
+  OQTO_LOG_LEVEL: info
+  OQTO_CHAT_FIRST_RESPONSE_TIMEOUT_MS: "180000"
+  OQTO_CHAT_STREAM_IDLE_TIMEOUT_MS: "60000"
+  ADMIN_USER: admin
+  ADMIN_EMAIL: admin@oqto.local
+  LOCAL_LLM_URL: ""
+  FHGENIE_BASE_URL: https://fhgenie.fraunhofer.de/v1
+  FHGENIE_MODEL: nvidia/GLM-5.3-NVFP4
+
+# Provide secrets here for a quick start, or set existingSecret to a
+# separately managed Kubernetes Secret containing the same environment keys.
+secret:
+  existingSecret: ""
+  data:
+    ADMIN_PASSWORD: ""
+    JWT_SECRET: ""
+    ANTHROPIC_API_KEY: ""
+    OPENAI_API_KEY: ""
+    GEMINI_API_KEY: ""
+    OPENROUTER_API_KEY: ""
+    AZURE_API_KEY: ""
+    DEEPSEEK_API_KEY: ""
+    MISTRAL_API_KEY: ""
+    FHGENIE_API_KEY: ""
+
+persistence:
+  enabled: true
+  accessModes:
+    - ReadWriteOnce
+  size: 10Gi
+  storageClassName: ""
+  annotations: {}
+
+podAnnotations: {}
+podLabels: {}
+podSecurityContext: {}
+containerSecurityContext: {}
+terminationGracePeriodSeconds: 60
+
+startupProbe:
+  enabled: true
+  periodSeconds: 5
+  timeoutSeconds: 3
+  failureThreshold: 60
+
+readinessProbe:
+  enabled: true
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+livenessProbe:
+  enabled: true
+  periodSeconds: 20
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+resources: {}
+nodeSelector: {}
+tolerations: []
+affinity: {}
