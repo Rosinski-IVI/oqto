@@ -40,6 +40,24 @@ include `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`,
 `MISTRAL_API_KEY`, and `FHGENIE_API_KEY`. `ADMIN_PASSWORD` and `JWT_SECRET`
 may also be supplied this way.
 
+## GitHub Copilot
+
+Enable the existing per-user device-code OAuth flow with:
+
+```yaml
+oauth:
+  enabled: true
+  providers:
+    - github-copilot
+```
+
+After upgrading the release, users connect from **Settings → API Keys →
+Provider logins**. Each Oqto account authorizes its own GitHub Copilot access;
+no Copilot token or GitHub credential belongs in Helm values or Kubernetes
+Secrets. The default `OQTO_SINGLE_USER=true` mode represents one Oqto identity;
+use the authenticated multi-user configuration when users need separate
+Copilot accounts. A redirect URI is not needed for GitHub's device flow.
+
 ## OpenAI-compatible providers
 
 `openaiCompatibleProviders` is a list of EAVS `openai-compatible` providers.
