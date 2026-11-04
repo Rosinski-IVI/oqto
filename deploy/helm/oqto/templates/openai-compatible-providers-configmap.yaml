@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "oqto.openaiCompatibleProvidersConfigMapName" . }}
+  labels:
+    {{- include "oqto.labels" . | nindent 4 }}
+data:
+  providers.json: |-
+    {{- toJson .Values.openaiCompatibleProviders | nindent 4 }}

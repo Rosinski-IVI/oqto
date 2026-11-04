@@ -23,6 +23,7 @@ spec:
         {{- end }}
       annotations:
         checksum/env: {{ toJson .Values.env | sha256sum }}
+        checksum/openai-compatible-providers: {{ toJson .Values.openaiCompatibleProviders | sha256sum }}
         {{- if not .Values.secret.existingSecret }}
         checksum/secret: {{ toJson .Values.secret.data | sha256sum }}
         {{- end }}
@@ -52,6 +53,8 @@ spec:
             - name: {{ $name }}
               value: {{ $value | toString | quote }}
             {{- end }}
+            - name: OPENAI_COMPATIBLE_PROVIDERS_FILE
+              value: /etc/oqto/openai-compatible-providers.json
           envFrom:
             - secretRef:
                 name: {{ include "oqto.secretName" . }}
@@ -91,6 +94,10 @@ spec:
           volumeMounts:
             - name: data
               mountPath: /data
+            - name: openai-compatible-providers
+              mountPath: /etc/oqto/openai-compatible-providers.json
+              subPath: providers.json
+              readOnly: true
       volumes:
         - name: data
           {{- if .Values.persistence.enabled }}
@@ -99,6 +106,9 @@ spec:
           {{- else }}
           emptyDir: {}
           {{- end }}
+        - name: openai-compatible-providers
+          configMap:
+            name: {{ include "oqto.openaiCompatibleProvidersConfigMapName" . }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}

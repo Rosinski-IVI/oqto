@@ -25,8 +25,36 @@ env:
   ADMIN_USER: admin
   ADMIN_EMAIL: admin@oqto.local
   LOCAL_LLM_URL: ""
-  FHGENIE_BASE_URL: https://fhgenie.fraunhofer.de/v1
-  FHGENIE_MODEL: nvidia/GLM-5.3-NVFP4
+
+openaiCompatibleProviders:
+  - name: fhgenie
+    baseUrl: https://fhgenie.fraunhofer.de/v1
+    apiKeyEnv: FHGENIE_API_KEY
+    models:
+      - id: nvidia/GLM-5.3-NVFP4
+        name: GLM 5.3
+        reasoning: true
+        input: [text]
+        thinking_level_map:
+          "off": null
+          minimal: null
+          low: null
+          medium: null
+          high: high
+          xhigh: null
+          max: max
+      - id: deepseek-ai/DeepSeek-V4.1-Flash
+        name: DeepSeek V4.1 Flash
+        reasoning: true
+        input: [text, image]
+        thinking_level_map:
+          "off": null
+          minimal: null
+          low: low
+          medium: null
+          high: high
+          xhigh: null
+          max: max
 
 # Provide secrets here for a quick start, or set existingSecret to a
 # separately managed Kubernetes Secret containing the same environment keys.

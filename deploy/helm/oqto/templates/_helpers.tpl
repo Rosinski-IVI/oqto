@@ -35,3 +35,7 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- define "oqto.secretName" -}}
 {{- default (printf "%s-env" (include "oqto.fullname" .)) .Values.secret.existingSecret -}}
 {{- end -}}
+
+{{- define "oqto.openaiCompatibleProvidersConfigMapName" -}}
+{{- printf "%s-openai-providers" (include "oqto.fullname" .) | trunc 63 | trimSuffix "-" -}}
+{{- end -}}

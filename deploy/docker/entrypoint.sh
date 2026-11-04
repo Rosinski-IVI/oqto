@@ -34,6 +34,7 @@ set -euo pipefail
 OQTO_DATA_DIR="${OQTO_DATA_DIR:-/data}"
 OQTO_PORT="${OQTO_PORT:-8080}"
 EAVS_PORT="${EAVS_PORT:-3033}"
+OPENAI_COMPATIBLE_PROVIDERS_FILE="${OPENAI_COMPATIBLE_PROVIDERS_FILE:-}"
 OQTO_LOG_LEVEL="${OQTO_LOG_LEVEL:-info}"
 OQTO_SINGLE_USER="${OQTO_SINGLE_USER:-false}"
 OQTO_CHAT_FIRST_RESPONSE_TIMEOUT_MS="${OQTO_CHAT_FIRST_RESPONSE_TIMEOUT_MS:-180000}"
@@ -243,7 +244,67 @@ base_url = "https://openrouter.ai/api/v1"
 EOF
 fi
 
-if [ -n "${FHGENIE_API_KEY:-}" ]; then
+if [ -n "$OPENAI_COMPATIBLE_PROVIDERS_FILE" ]; then
+  if [ ! -r "$OPENAI_COMPATIBLE_PROVIDERS_FILE" ]; then
+    log_error "OPENAI_COMPATIBLE_PROVIDERS_FILE is not readable: ${OPENAI_COMPATIBLE_PROVIDERS_FILE}"
+    exit 1
+  fi
+  if ! jq -e '
+    type == "array" and
+    all(.[];
+      . as $provider
+      | ($provider.name | type == "string" and test("^[A-Za-z0-9_-]+$")) and
+        (["anthropic", "openai", "google", "openrouter", "local"] | index($provider.name) == null) and
+        ($provider.baseUrl | type == "string" and length > 0) and
+        ((($provider.apiKeyEnv // "") | type) == "string") and
+        (($provider.apiKeyEnv // "") == "" or (($provider.apiKeyEnv // "") | test("^[A-Za-z_][A-Za-z0-9_]*$"))) and
+        (($provider.supportsDeveloperRole == null) or ($provider.supportsDeveloperRole | type == "boolean")) and
+        ($provider.models | type == "array" and length > 0 and all(.[];
+          . as $model
+          | ($model.id | type == "string" and length > 0) and
+            ($model.name | type == "string") and
+            ($model.reasoning | type == "boolean") and
+            ($model.input | type == "array" and all(.[]; type == "string")) and
+            (($model.thinking_level_map // {}) | type == "object" and all(.[]; . == null or type == "string"))
+        ))
+    ) and ([.[].name] | length == (unique | length))
+  ' "$OPENAI_COMPATIBLE_PROVIDERS_FILE" >/dev/null; then
+    log_error "OPENAI_COMPATIBLE_PROVIDERS_FILE contains an invalid provider or model definition"
+    exit 1
+  fi
+
+  jq -r '
+    def toml_value:
+      if type == "string" then @json
+      elif type == "boolean" or type == "number" then tostring
+      elif type == "array" then "[" + (map(toml_value) | join(", ")) + "]"
+      elif type == "object" then
+        "{ " + (to_entries | map((.key | @json) + " = " + (.value | toml_value)) | join(", ")) + " }"
+      else error("unsupported TOML value") end;
+
+    .[]
+    | select((.apiKeyEnv // "") == "" or (env[.apiKeyEnv] // "") != "")
+    | . as $provider
+    | "\n[providers.\($provider.name | @json)]\ntype = \"openai-compatible\"\n"
+      + (if ($provider.apiKeyEnv // "") != "" then "api_key = " + (("env:" + $provider.apiKeyEnv) | @json) + "\n" else "" end)
+      + "base_url = \($provider.baseUrl | @json)\n"
+      + (if $provider.supportsDeveloperRole != null then
+          "\n[providers.\($provider.name | @json).compat]\nsupports_developer_role = \($provider.supportsDeveloperRole)\n"
+        else "" end)
+      + ($provider.models | map(
+          . as $model
+          | "\n[[providers.\($provider.name | @json).models]]\n"
+            + "id = \($model.id | @json)\n"
+            + "name = \($model.name | @json)\n"
+            + "reasoning = \($model.reasoning)\n"
+            + "input = [\([$model.input[] | @json] | join(", "))]\n"
+            + (if ($model.context_window // 0) > 0 then "context_window = \($model.context_window)\n" else "" end)
+            + (if ($model.max_tokens // 0) > 0 then "max_tokens = \($model.max_tokens)\n" else "" end)
+            + (if (($model.cost // {}) | length) > 0 then "cost = \($model.cost | toml_value)\n" else "" end)
+            + (if (($model.compat // {}) | length) > 0 then "compat = \($model.compat | toml_value)\n" else "" end)
+        ) | join(""))
+  ' "$OPENAI_COMPATIBLE_PROVIDERS_FILE" >> "$EAVS_CONFIG_FILE"
+elif [ -n "${FHGENIE_API_KEY:-}" ]; then
   cat >> "$EAVS_CONFIG_FILE" <<EOF
 
 [providers.fhgenie]
@@ -431,11 +492,22 @@ set -a
 # shellcheck source=/dev/null
 source "$EAVS_ENV_FILE"
 set +a
+OPENAI_COMPATIBLE_PROVIDER_KEY_EXPORTS=""
+if [ -n "$OPENAI_COMPATIBLE_PROVIDERS_FILE" ] && [ -r "$OPENAI_COMPATIBLE_PROVIDERS_FILE" ]; then
+  while IFS= read -r key_name; do
+    [ -n "$key_name" ] || continue
+    key_value="${!key_name:-}"
+    [ -n "$key_value" ] || continue
+    printf -v key_export 'export %s=%q\n' "$key_name" "$key_value"
+    OPENAI_COMPATIBLE_PROVIDER_KEY_EXPORTS+="$key_export"
+  done < <(jq -r '[.[].apiKeyEnv // empty] | unique[]' "$OPENAI_COMPATIBLE_PROVIDERS_FILE")
+fi
 su -s /bin/bash oqto -c "
   export HOME=/home/oqto
   export XDG_CONFIG_HOME=/home/oqto/.config
   export XDG_DATA_HOME=${OQTO_DATA_DIR}
   $(env | grep -E '^(ANTHROPIC|OPENAI|GEMINI|OPENROUTER|AZURE|DEEPSEEK|MISTRAL|FHGENIE|EAVS_)' | sed 's/^/export /')
+  ${OPENAI_COMPATIBLE_PROVIDER_KEY_EXPORTS}
   eavs serve --port ${EAVS_PORT} --host 127.0.0.1 2>&1 | sed 's/^/[eavs] /'
 " &
 PIDS+=($!)
@@ -476,43 +548,51 @@ fi
 PI_AGENT_DIR="/home/oqto/.pi/agent"
 PI_MODELS_FILE="${PI_AGENT_DIR}/models.json"
 PI_MODELS_TEMP="${PI_MODELS_FILE}.tmp"
+OPENAI_COMPATIBLE_PI_METADATA='[]'
+if [ -n "$OPENAI_COMPATIBLE_PROVIDERS_FILE" ] && [ -r "$OPENAI_COMPATIBLE_PROVIDERS_FILE" ]; then
+  OPENAI_COMPATIBLE_PI_METADATA=$(jq -c '[.[] | {name, models: [.models[] | {id, thinking_level_map: (.thinking_level_map // {})}]}]' "$OPENAI_COMPATIBLE_PROVIDERS_FILE")
+fi
 mkdir -p "$PI_AGENT_DIR"
 chown oqto:oqto "$PI_AGENT_DIR"
 
 if ! curl -fsS "${EAVS_BASE_URL}/providers/detail" \
-  | EAVS_PI_KEY="$EAVS_PI_KEY" jq --arg base_url "$EAVS_BASE_URL" '
-    def pi_model:
-      {
-        id: .id,
-        name: (if (.name // "") == "" then .id else .name end),
-        reasoning: (.reasoning // false),
-        input: ((.input // []) | if length == 0 then ["text"] else . end),
-        contextWindow: (.context_window // 0),
-        maxTokens: (.max_tokens // 0),
-        cost: {
-          input: (.cost.input // 0),
-          output: (.cost.output // 0),
-          cacheRead: (.cost.cache_read // 0),
-          cacheWrite: (.cost.input // 0)
+  | EAVS_PI_KEY="$EAVS_PI_KEY" jq --arg base_url "$EAVS_BASE_URL" --argjson compatible_provider_metadata "$OPENAI_COMPATIBLE_PI_METADATA" '
+    def pi_model($provider_name):
+      . as $model
+      | ([$compatible_provider_metadata[]? | select(.name == $provider_name) | .models[]? | select(.id == $model.id) | .thinking_level_map] | first // {}) as $thinking_level_map
+      | {
+          id: $model.id,
+          name: (if ($model.name // "") == "" then $model.id else $model.name end),
+          reasoning: ($model.reasoning // false),
+          input: (($model.input // []) | if length == 0 then ["text"] else . end),
+          contextWindow: ($model.context_window // 0),
+          maxTokens: ($model.max_tokens // 0),
+          cost: {
+            input: ($model.cost.input // 0),
+            output: ($model.cost.output // 0),
+            cacheRead: ($model.cost.cache_read // 0),
+            cacheWrite: ($model.cost.input // 0)
+          }
         }
-      }
-      + (if ((.compat // {}) | length) > 0 then {compat: .compat} else {} end);
+        + (if ($thinking_level_map | length) > 0 then {thinkingLevelMap: $thinking_level_map} else {} end)
+        + (if (($model.compat // {}) | length) > 0 then {compat: $model.compat} else {} end);
 
     {
       providers: (
         [
           .[]
           | select(.name != "default" and (.pi_api | type) == "string")
+          | . as $provider
           | {
-              key: ("eavs-" + .name),
+              key: ("eavs-" + $provider.name),
               value: (
                 {
-                  baseUrl: ($base_url + "/" + .name + "/v1"),
-                  api: .pi_api,
+                  baseUrl: ($base_url + "/" + $provider.name + "/v1"),
+                  api: $provider.pi_api,
                   apiKey: env.EAVS_PI_KEY,
-                  models: [.models[]? | pi_model]
+                  models: [$provider.models[]? | pi_model($provider.name)]
                 }
-                + (if ((.headers // {}) | length) > 0 then {headers: .headers} else {} end)
+                + (if (($provider.headers // {}) | length) > 0 then {headers: $provider.headers} else {} end)
               )
             }
         ]
