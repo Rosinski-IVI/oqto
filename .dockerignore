@@ -4,6 +4,12 @@
 # Allow only what the Dockerfile COPYs
 !deploy/docker/Caddyfile
 !deploy/docker/entrypoint.sh
+!frontend/
+!frontend/**
+frontend/node_modules/
+frontend/dist/
+frontend/.tmp/
+frontend/.vite/
 
 # Per-Workspace image inputs (deploy/workspace/Containerfile).
 !dependencies.toml

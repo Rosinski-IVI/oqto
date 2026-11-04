@@ -1,0 +1,1 @@
+window.__OQTO_RUNTIME_CONFIG__ = window.__OQTO_RUNTIME_CONFIG__ || {};

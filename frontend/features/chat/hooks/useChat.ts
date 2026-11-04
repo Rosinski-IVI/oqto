@@ -21,6 +21,10 @@ import {
 	sharedWorkspaceSessionMap,
 } from "@/components/contexts/chat-context";
 import { getChatMessages } from "@/lib/api/chat";
+import {
+	CHAT_FIRST_RESPONSE_TIMEOUT_MS,
+	CHAT_STREAM_IDLE_TIMEOUT_MS,
+} from "@/lib/chat-timeouts";
 import type { SessionConfig } from "@/lib/canonical-types";
 import {
 	createPiSessionId,
@@ -736,7 +740,7 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
 						"The agent did not respond in time. We recovered latest history. Please retry.",
 					),
 				);
-			}, 30000);
+			}, CHAT_FIRST_RESPONSE_TIMEOUT_MS);
 		},
 		[applyTurnState, clearResponseWatchdog, fetchHistoryMessages],
 	);
@@ -1988,8 +1992,8 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
 
 			manager.agentGetState(sessionId);
 
-			// After 12s of silence, recover from oqto-log and clear spinner.
-			if (idleMs >= 12000) {
+			// After the configured idle timeout, recover from oqto-log and clear spinner.
+			if (idleMs >= CHAT_STREAM_IDLE_TIMEOUT_MS) {
 				applyTurnState({ kind: "idle" });
 				void fetchHistoryMessages(sessionId);
 				setError(

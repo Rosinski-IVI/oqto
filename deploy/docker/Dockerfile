@@ -26,7 +26,7 @@
 # =============================================================================
 
 # ---------------------------------------------------------------------------
-# Stage 1: Download ALL pre-built binaries
+# Stage 1: Build the frontend and download pre-built binaries
 # ---------------------------------------------------------------------------
 #
 # Zero compilation. Everything comes from GitHub releases:
@@ -41,6 +41,16 @@
 #   oqto:  oqto-{tag}-{target}.tar.gz         (binaries in bin/ subdir)
 #          oqto-frontend-{tag}.tar.gz          (static assets in dist/)
 #
+FROM node:22-bookworm-slim AS frontend-builder
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl unzip \
+  && rm -rf /var/lib/apt/lists/* \
+  && npm install --global pnpm@10.10.0 \
+  && curl -fsSL https://bun.sh/install | bash \
+  && ln -s /root/.bun/bin/bun /usr/local/bin/bun
+WORKDIR /app/frontend
+COPY frontend/ ./
+RUN pnpm install --no-frozen-lockfile && pnpm build
+
 FROM ubuntu:24.04 AS downloader
 # Note: downloader uses plain ubuntu (no systemd needed here)
 
@@ -80,10 +90,6 @@ RUN set -eux; \
       | tar xz --strip-components=1 -C /tmp/ \
     && cp /tmp/bin/* /out/bin/ \
     && if [ -d /tmp/lib/oqto-browserd ]; then cp -r /tmp/lib/oqto-browserd /out/lib/; fi; \
-    \
-    echo "--- Downloading oqto frontend ---"; \
-    curl -fsSL "$GH/oqto/releases/download/${TAG}/oqto-frontend-${TAG}.tar.gz" \
-      | tar xz --strip-components=2 -C /out/frontend/; \
     \
     # ================================================================== \
     # Byteowlz Rust tools (EAVS nests its binary under <release>/bin/) \
@@ -161,6 +167,9 @@ RUN set -eux; \
       echo "ERROR: Required binaries missing:$MISSING"; exit 1; \
     fi; \
     echo "=== All required binaries present ==="
+
+  COPY --from=frontend-builder /app/frontend/dist/ /out/frontend/
+  RUN test -s /out/frontend/index.html
 
 # ---------------------------------------------------------------------------
 # Stage 2: Final image

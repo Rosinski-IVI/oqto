@@ -36,6 +36,8 @@ OQTO_PORT="${OQTO_PORT:-8080}"
 EAVS_PORT="${EAVS_PORT:-3033}"
 OQTO_LOG_LEVEL="${OQTO_LOG_LEVEL:-info}"
 OQTO_SINGLE_USER="${OQTO_SINGLE_USER:-false}"
+OQTO_CHAT_FIRST_RESPONSE_TIMEOUT_MS="${OQTO_CHAT_FIRST_RESPONSE_TIMEOUT_MS:-180000}"
+OQTO_CHAT_STREAM_IDLE_TIMEOUT_MS="${OQTO_CHAT_STREAM_IDLE_TIMEOUT_MS:-60000}"
 
 ADMIN_USER="${ADMIN_USER:-admin}"
 ADMIN_EMAIL="${ADMIN_EMAIL:-admin@oqto.local}"
@@ -53,6 +55,26 @@ PIDS=()
 
 log() { echo "[oqto-init] $(date '+%H:%M:%S') $*"; }
 log_error() { echo "[oqto-init] $(date '+%H:%M:%S') ERROR: $*" >&2; }
+
+validate_timeout_ms() {
+  local name="$1" value="$2" numeric
+  case "$value" in
+    ''|*[!0-9]*) log_error "${name} must be an integer from 1 to 2147483647"; return 1 ;;
+  esac
+  if [ "${#value}" -gt 10 ]; then
+    log_error "${name} must be an integer from 1 to 2147483647"
+    return 1
+  fi
+  numeric=$((10#$value))
+  if [ "$numeric" -lt 1 ] || [ "$numeric" -gt 2147483647 ]; then
+    log_error "${name} must be an integer from 1 to 2147483647"
+    return 1
+  fi
+  return 0
+}
+
+validate_timeout_ms OQTO_CHAT_FIRST_RESPONSE_TIMEOUT_MS "$OQTO_CHAT_FIRST_RESPONSE_TIMEOUT_MS"
+validate_timeout_ms OQTO_CHAT_STREAM_IDLE_TIMEOUT_MS "$OQTO_CHAT_STREAM_IDLE_TIMEOUT_MS"
 
 generate_secret() {
   head -c 48 /dev/urandom | base64 | tr -d '/+=' | head -c "${1:-64}"
@@ -355,6 +377,12 @@ cat > /etc/caddy/Caddyfile <<EOF
         respond "OK" 200
     }
 
+    handle /runtime-config.js {
+      root * /usr/local/share/oqto/frontend
+      header Cache-Control "no-store"
+      file_server
+    }
+
     # API and WebSocket -> oqto backend
     handle /api/* {
         reverse_proxy 127.0.0.1:${OQTO_BACKEND_PORT}
@@ -600,6 +628,15 @@ if [ ! -f "${OQTO_DATA_DIR}/oqto/.bootstrapped" ]; then
 fi
 
 # 7. caddy (reverse proxy + frontend)
+RUNTIME_CONFIG_FILE="/usr/local/share/oqto/frontend/runtime-config.js"
+cat > "$RUNTIME_CONFIG_FILE" <<EOF
+window.__OQTO_RUNTIME_CONFIG__ = {
+  chatFirstResponseTimeoutMs: ${OQTO_CHAT_FIRST_RESPONSE_TIMEOUT_MS},
+  chatStreamIdleTimeoutMs: ${OQTO_CHAT_STREAM_IDLE_TIMEOUT_MS}
+};
+EOF
+chmod 644 "$RUNTIME_CONFIG_FILE"
+
 log "Starting caddy..."
 caddy run --config /etc/caddy/Caddyfile --adapter caddyfile 2>&1 | sed 's/^/[caddy] /' &
 PIDS+=($!)
