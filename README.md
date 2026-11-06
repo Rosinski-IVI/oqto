@@ -172,6 +172,9 @@ scripts/          Build and utility scripts
 tools/            CLI tools and utilities
 ```
 
+See [fork maintenance](./docs/reference/fork-maintenance.md) for branch and
+upstream-sync guidance.
+
 ## Configuration
 
 See [backend/crates/oqto/examples/config.toml](./backend/crates/oqto/examples/config.toml) for the full reference.
