@@ -6,8 +6,7 @@ name: Workspace Image
 # release provenance (org.opencontainers.image.version/revision + io.oqto.version)
 # and the backend rejects placements whose io.oqto.version drifts from its own.
 #
-# Image lives in this repo (byteowlz/containers is reserved for shared
-# multi-project images). See oqto-nppq.17.
+# Image is published alongside the main Oqto package under the project owner.
 
 on:
   release:
@@ -21,7 +20,7 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: byteowlz/oqto-workspace
+  IMAGE_NAME: rosinski-ivi/oqto-workspace
 
 permissions:
   contents: read
@@ -103,6 +102,7 @@ jobs:
             --platform ${{ matrix.podman_arch }} \
             --build-arg OQTO_VERSION="${{ needs.meta.outputs.version }}" \
             --build-arg OQTO_REVISION="${{ needs.meta.outputs.revision }}" \
+            --build-arg OQTO_SOURCE="https://github.com/Rosinski-IVI/oqto" \
             -f deploy/workspace/Containerfile \
             -t oqto-workspace:${{ matrix.arch }} \
             .
@@ -177,7 +177,7 @@ jobs:
           echo "published $REF @ ${DIGEST}"
           echo "## oqto-workspace ${VERSION}" > /tmp/release-note.md
           echo "" >> /tmp/release-note.md
-          echo "\`ghcr.io/byteowlz/oqto-workspace:${VERSION}\`" >> /tmp/release-note.md
+          echo "\`ghcr.io/rosinski-ivi/oqto-workspace:${VERSION}\`" >> /tmp/release-note.md
           echo "" >> /tmp/release-note.md
           echo "Multi-arch (amd64+arm64). Pin for production:" >> /tmp/release-note.md
           echo "" >> /tmp/release-note.md

@@ -14,7 +14,7 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: byteowlz/oqto
+  IMAGE_NAME: rosinski-ivi/oqto
 
 permissions:
   contents: read

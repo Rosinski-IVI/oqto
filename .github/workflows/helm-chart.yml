@@ -1,0 +1,76 @@
+name: Helm Chart
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing release tag to package (e.g., v0.5.0)'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  RELEASE_TAG: ${{ inputs.tag || github.event.release.tag_name }}
+  CHART_REGISTRY: ghcr.io/rosinski-ivi/chart
+
+jobs:
+  publish:
+    name: Package and publish OCI chart
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.event.release.tag_name }}
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4.3.1
+        with:
+          version: v3.17.3
+
+      - name: Derive chart version from release tag
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "$RELEASE_TAG" != v* ]]; then
+            echo "::error::Expected a v-prefixed release tag, got '$RELEASE_TAG'"
+            exit 1
+          fi
+          version="${RELEASE_TAG#v}"
+          if [[ -z "$version" ]]; then
+            echo "::error::Release tag has no version"
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Lint and package chart
+        run: |
+          set -euo pipefail
+          helm lint deploy/helm/oqto
+          mkdir -p "$RUNNER_TEMP/chart"
+          helm package deploy/helm/oqto \
+            --destination "$RUNNER_TEMP/chart" \
+            --version "${{ steps.version.outputs.version }}" \
+            --app-version "${{ steps.version.outputs.version }}"
+
+      - name: Log in to GitHub Container Registry
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          printf '%s' "$GHCR_TOKEN" | helm registry login ghcr.io \
+            --username "$GITHUB_ACTOR" \
+            --password-stdin
+
+      - name: Push chart to GHCR
+        run: |
+          set -euo pipefail
+          helm push "$RUNNER_TEMP/chart/oqto-${{ steps.version.outputs.version }}.tgz" \
+            "oci://${CHART_REGISTRY}"
+          echo "Published oci://${CHART_REGISTRY}/oqto:${{ steps.version.outputs.version }}" \
+            >> "$GITHUB_STEP_SUMMARY"
