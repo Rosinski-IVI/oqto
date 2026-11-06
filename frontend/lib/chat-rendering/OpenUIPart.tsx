@@ -1,4 +1,4 @@
-import { MarkdownRenderer } from "@/components/data-display";
+import { MarkdownRenderer } from "@/components/data-display/markdown-renderer";
 /**
  * OpenUI parts in the web chat (ADR-0074, oqto-8qse.4).
  *
@@ -12,7 +12,7 @@ import { MarkdownRenderer } from "@/components/data-display";
  * schema, unknown components are dropped, no HTML is injected and no action runs.
  */
 import { createOqtoParser } from "@byteowlz/oqto-openui";
-import { useMemo } from "react";
+import { type CSSProperties, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import "./openui-part.css";
 
@@ -85,14 +85,16 @@ function toneOf(v: unknown): string {
 
 /** A stable, de-emphasised line for components this host does not draw yet. */
 function NotRendered({ name }: { name: string }) {
+	const { t } = useTranslation();
 	return (
 		<div className="wb-openui__unsupported">
-			{name} is not rendered in the web chat yet.
+			{t("oqtoUi.openui.unsupported", { name })}
 		</div>
 	);
 }
 
 function Charts({ node }: { node: Element }) {
+	const { t } = useTranslation();
 	const p = node.props;
 	const labels = arr(p.labels).map(text);
 	const series = arr(p.series).filter(isElement);
@@ -115,7 +117,11 @@ function Charts({ node }: { node: Element }) {
 									<span
 										className="wb-openui__bar-fill"
 										key={seriesKey}
-										style={{ width: `${((v[i] ?? 0) / max) * 100}%` }}
+										style={
+											{
+												"--bar-width": `${((v[i] ?? 0) / max) * 100}%`,
+											} as CSSProperties
+										}
 										data-series={k}
 									/>
 								),
@@ -151,9 +157,15 @@ function Charts({ node }: { node: Element }) {
 					className="wb-openui__spark"
 					data-series={k}
 					role="img"
-					aria-label={text(props(series[k] ?? {}).category) || "series"}
+					aria-label={
+						text(props(series[k] ?? {}).category) ||
+						t("oqtoUi.openui.chartSeries")
+					}
 				>
-					<title>{text(props(series[k] ?? {}).category) || "series"}</title>
+					<title>
+						{text(props(series[k] ?? {}).category) ||
+							t("oqtoUi.openui.chartSeries")}
+					</title>
 					<polyline
 						points={v
 							.map(
@@ -182,6 +194,7 @@ function Charts({ node }: { node: Element }) {
 }
 
 function Node({ node }: { node: unknown }) {
+	const { t } = useTranslation();
 	if (Array.isArray(node)) {
 		return (
 			<>
@@ -382,7 +395,7 @@ function Node({ node }: { node: unknown }) {
 							key={key}
 							type="button"
 							disabled
-							title="Answers are given in the terminal"
+							title={t("oqtoUi.openui.answerInTerminalTitle")}
 						>
 							{text(props(button).label)}
 						</button>
@@ -395,7 +408,7 @@ function Node({ node }: { node: unknown }) {
 					<button
 						type="button"
 						disabled
-						title="Answers are given in the terminal"
+						title={t("oqtoUi.openui.answerInTerminalTitle")}
 					>
 						{text(p.label)}
 					</button>
@@ -465,7 +478,11 @@ function Node({ node }: { node: unknown }) {
 							<span
 								key={key}
 								data-series={i}
-								style={{ width: `${(v / total) * 100}%` }}
+								style={
+									{
+										"--share-width": `${(v / total) * 100}%`,
+									} as CSSProperties
+								}
 							/>
 						))}
 					</span>
@@ -591,7 +608,9 @@ export function OpenUIPart({
 			) : null}
 			{parsed.errors.length ? (
 				<div className="wb-openui__unsupported">
-					{parsed.errors.length} component warning(s)
+					{t("oqtoUi.openui.componentWarnings", {
+						count: parsed.errors.length,
+					})}
 				</div>
 			) : null}
 		</div>

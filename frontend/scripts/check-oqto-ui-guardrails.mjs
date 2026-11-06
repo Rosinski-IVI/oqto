@@ -49,7 +49,7 @@ const ALLOWED_PROJECT_ALIASES = {
 	app: ["@/hooks/use-document-event"],
 	layout: [],
 	compositor: [],
-	sessions: [],
+	sessions: ["@/hooks/use-gitlab-unread-counts"],
 	chat: [
 		"@/components/chat/tool-call-card",
 		"@/components/data-display/context-window-gauge",
@@ -68,7 +68,7 @@ const ALLOWED_PROJECT_ALIASES = {
 		"@/lib/workspace-resource",
 	],
 	files: ["@/hooks/use-mount-effect"],
-	issues: ["@/hooks/use-mount-effect"],
+	issues: ["@/hooks/use-mount-effect", "@/hooks/use-gitlab-inbox-watch"],
 	git: ["@/hooks/use-mount-effect"],
 	terminal: ["@/hooks/use-mount-effect"],
 	gallery: [],
@@ -82,6 +82,7 @@ const ALLOWED_PROJECT_ALIASES = {
 		// These contain no legacy chat/session transport or history authority.
 		"@/components/voice/ComposerDictation",
 		"@/features/voice/hooks/useDictation",
+		"@/features/voice/hooks/useVoiceFeatures",
 		"@/lib/chat-draft-storage",
 	],
 	dev: [],

@@ -23,7 +23,6 @@ import {
 import type { StreamingPresentationMode } from "@/lib/streaming-presentation";
 import { getToolSummary } from "@/lib/tool-summaries";
 import { cn } from "@/lib/utils";
-import { OpenUIPart, readOpenUIPart } from "@/src/oqto-ui/chat/OpenUIPart";
 import {
 	Check,
 	Copy,
@@ -52,6 +51,7 @@ import {
 	useSyncExternalStore,
 } from "react";
 import { useTranslation } from "react-i18next";
+import { OpenUIPart, readOpenUIPart } from "./OpenUIPart";
 import { dedentMarkdown, stripAnsiSequences } from "./chat-render-text";
 import type { MessageGroup } from "./group-messages";
 

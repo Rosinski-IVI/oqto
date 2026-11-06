@@ -1,3 +1,4 @@
+import type { SaveGitLabConfigInput } from "./gitlab-connection-contract";
 import type {
 	GitLabConnection,
 	GitLabEventCategory,
@@ -10,10 +11,77 @@ import type {
 	GitLabTicketList,
 	GitLabUnreadCounts,
 } from "./gitlab-contract";
+import type { SaveGitLabMappingInput } from "./gitlab-mapping-contract";
+import type {
+	CreateGitLabDraftInput,
+	MarkGitLabMergeRequestReadyInput,
+} from "./gitlab-merge-request-contract";
+import type { CreateGitLabProposalInput } from "./gitlab-proposal-contract";
 import type { IssueStatus } from "./issues-contract";
 import type { MuxSocket } from "./mux-files";
 
-type WireRecord = Record<string, unknown>;
+interface WireRecord {
+	error?: unknown;
+	host?: unknown;
+	path_prefix?: unknown;
+	credential_id?: unknown;
+	revision?: unknown;
+	enabled?: unknown;
+	event_categories?: unknown;
+	credential_ready?: unknown;
+	connected?: unknown;
+	gitlab_username?: unknown;
+	workspace_path?: unknown;
+	project_path?: unknown;
+	source?: unknown;
+	categories?: unknown;
+	id?: unknown;
+	category?: unknown;
+	entity_kind?: unknown;
+	entity_iid?: unknown;
+	related_issue_iid?: unknown;
+	discussion_id?: unknown;
+	session_id?: unknown;
+	title?: unknown;
+	summary?: unknown;
+	url?: unknown;
+	occurred_at?: unknown;
+	read_at?: unknown;
+	status?: unknown;
+	iid?: unknown;
+	priority?: unknown;
+	issue_type?: unknown;
+	state?: unknown;
+	parent_id?: unknown;
+	blocked_by?: unknown;
+	labels?: unknown;
+	description?: unknown;
+	web_url?: unknown;
+	updated_at?: unknown;
+	status_conflict?: unknown;
+	merge_request_iid?: unknown;
+	kind?: unknown;
+	issue_iid?: unknown;
+	payload?: unknown;
+	created_at?: unknown;
+	session_stale?: unknown;
+	username?: unknown;
+	credential_revision?: unknown;
+	issues?: unknown;
+	truncated?: unknown;
+	workspaces?: unknown;
+	total?: unknown;
+	count?: unknown;
+	channel?: unknown;
+	type?: unknown;
+	workspace_unread?: unknown;
+	total_unread?: unknown;
+	state_event?: unknown;
+	body?: unknown;
+	comments?: unknown;
+	remote_name?: unknown;
+	target_branch?: unknown;
+}
 
 function record(value: unknown): WireRecord | null {
 	return typeof value === "object" && value !== null && !Array.isArray(value)
@@ -248,7 +316,7 @@ export function createLiveGitLabHost(openSocket?: () => MuxSocket): GitLabHost {
 		async getConfig() {
 			return connection(await request("/api/gitlab/config"));
 		},
-		async saveConfig(input) {
+		async saveConfig(input: SaveGitLabConfigInput) {
 			return connection(
 				await request("/api/gitlab/config", "PUT", {
 					instance_url: input.instanceUrl,
@@ -279,7 +347,7 @@ export function createLiveGitLabHost(openSocket?: () => MuxSocket): GitLabHost {
 				await request(`/api/gitlab/mapping${query(workspacePath)}`),
 			);
 		},
-		async saveMapping(input) {
+		async saveMapping(input: SaveGitLabMappingInput) {
 			return mapping(
 				await request("/api/gitlab/mapping", "PUT", {
 					workspace_path: input.workspacePath,
@@ -372,7 +440,7 @@ export function createLiveGitLabHost(openSocket?: () => MuxSocket): GitLabHost {
 			);
 			return Array.isArray(value) ? value.map(proposal) : [];
 		},
-		async createProposal(input) {
+		async createProposal(input: CreateGitLabProposalInput) {
 			return proposal(
 				await request("/api/gitlab/proposals", "POST", {
 					workspace_path: input.workspacePath,
@@ -406,7 +474,7 @@ export function createLiveGitLabHost(openSocket?: () => MuxSocket): GitLabHost {
 				{},
 			);
 		},
-		async createOrUpdateDraft(input) {
+		async createOrUpdateDraft(input: CreateGitLabDraftInput) {
 			return request("/api/gitlab/merge-requests/draft", "POST", {
 				workspace_path: input.workspacePath,
 				issue_iid: input.issueIid,
@@ -417,7 +485,7 @@ export function createLiveGitLabHost(openSocket?: () => MuxSocket): GitLabHost {
 				confirm_redraft_ready: input.confirmRedraftReady,
 			});
 		},
-		async markMergeRequestReady(input) {
+		async markMergeRequestReady(input: MarkGitLabMergeRequestReadyInput) {
 			return request("/api/gitlab/merge-requests/ready", "POST", {
 				workspace_path: input.workspacePath,
 				issue_iid: input.issueIid,

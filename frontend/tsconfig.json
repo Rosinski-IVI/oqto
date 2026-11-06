@@ -13,7 +13,7 @@
 		"isolatedModules": true,
 		"jsx": "react-jsx",
 		"incremental": true,
-		"types": ["vite/client"],
+		"types": ["vite/client", "node"],
 		"paths": {
 			"@oqto-flash/types": [
 				"../../oqto-flash/node_modules/@earendil-works/pi-durable/dist/index.d.ts"

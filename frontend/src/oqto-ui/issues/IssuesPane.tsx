@@ -38,15 +38,19 @@ interface IssuesPaneProps {
 	readonly workspacePath: string;
 	/** The Container's own controls, placed in this pane's bar. */
 	readonly chrome?: ReactNode;
-	readonly gitlabHost?: GitLabHost;
+	readonly gitlab?: GitLabIssuesIntegration;
+}
+
+interface GitLabIssuesIntegration {
+	readonly host?: GitLabHost;
 	readonly gitHost?: GitHost;
 	readonly sessionId?: string;
-	readonly onPlanGitLabIssue?: (event: GitLabInboxEvent) => void;
-	readonly onStartGitLabImplementation?: (
+	readonly onPlan?: (event: GitLabInboxEvent) => void;
+	readonly onStartImplementation?: (
 		event: GitLabInboxEvent,
 		sessionId: string | null,
 	) => void;
-	readonly onAddressGitLabComment?: (event: GitLabInboxEvent) => void;
+	readonly onAddressComment?: (event: GitLabInboxEvent) => void;
 }
 
 function byPriority(left: Issue, right: Issue): number {
@@ -57,12 +61,7 @@ export function IssuesPane({
 	issueHost,
 	workspacePath,
 	chrome,
-	gitlabHost,
-	gitHost,
-	sessionId = "",
-	onPlanGitLabIssue,
-	onStartGitLabImplementation,
-	onAddressGitLabComment,
+	gitlab,
 }: IssuesPaneProps) {
 	const { t } = useTranslation();
 	const board = useIssues(issueHost, workspacePath);
@@ -84,19 +83,19 @@ export function IssuesPane({
 					aria-pressed={source === "trx"}
 					onClick={() => setSource("trx")}
 				>
-					TRX
+					{t("oqtoUi.issues.source.trx")}
 				</button>
-				{gitlabHost && (
+				{gitlab?.host && (
 					<button
 						type="button"
 						aria-pressed={source === "gitlab"}
 						onClick={() => setSource("gitlab")}
 					>
-						GitLab
+						{t("oqtoUi.issues.source.gitlab")}
 					</button>
 				)}
 				{chrome}
-				{source === "gitlab" && gitlabHost ? null : (
+				{source === "gitlab" && gitlab?.host ? null : (
 					<>
 						<span>
 							{t("oqtoUi.issues.count", { count: board.issues.length })}
@@ -123,17 +122,18 @@ export function IssuesPane({
 					</>
 				)}
 			</header>
-			{source === "gitlab" && gitlabHost ? (
+			{source === "gitlab" && gitlab?.host ? (
 				<GitLabInboxPane
-					host={gitlabHost}
-					gitHost={gitHost}
+					key={workspacePath}
+					host={gitlab.host}
+					gitHost={gitlab.gitHost}
 					workspacePath={workspacePath}
-					sessionId={sessionId}
-					onPlan={(event) => onPlanGitLabIssue?.(event)}
+					sessionId={gitlab.sessionId ?? ""}
+					onPlan={(event) => gitlab.onPlan?.(event)}
 					onStartImplementation={(event, approvedSessionId) =>
-						onStartGitLabImplementation?.(event, approvedSessionId)
+						gitlab.onStartImplementation?.(event, approvedSessionId)
 					}
-					onAddressComment={(event) => onAddressGitLabComment?.(event)}
+					onAddressComment={(event) => gitlab.onAddressComment?.(event)}
 				/>
 			) : (
 				<div className="wb-issues__body">

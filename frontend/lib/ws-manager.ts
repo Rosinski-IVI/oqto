@@ -27,6 +27,9 @@ import type {
 	WsMuxConnectionState,
 } from "./ws-mux-types";
 
+type WithoutId<T> = T extends unknown ? Omit<T, "id"> : never;
+type WsCommandInput = WithoutId<WsCommand>;
+
 function isWsMuxDebugEnabled(): boolean {
 	if (!import.meta.env.DEV) return false;
 	try {
@@ -587,7 +590,7 @@ class WsConnectionManager {
 	 * @returns Promise that resolves with the response event
 	 */
 	async sendAndWait(
-		command: Omit<WsCommand, "id">,
+		command: WsCommandInput,
 		timeoutMs = 30000,
 	): Promise<WsEvent> {
 		await this.waitForConnected(Math.min(CONNECT_TIMEOUT_MS, timeoutMs));
@@ -598,8 +601,8 @@ class WsConnectionManager {
 			"cmd" in command
 				? command.cmd
 				: "type" in command
-					? (command as { type?: string }).type
-					: command.channel;
+					? String(command.type)
+					: "command";
 
 		return new Promise<WsEvent>((resolve, reject) => {
 			const timeout = setTimeout(() => {

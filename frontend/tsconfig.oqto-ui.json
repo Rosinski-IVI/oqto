@@ -4,5 +4,11 @@
 		"incremental": false
 	},
 	"include": ["src/oqto-ui", "vite-env.d.ts"],
-	"exclude": ["node_modules"]
+	"exclude": [
+		"node_modules",
+		"src/oqto-ui/platform/flash-chat.ts",
+		"src/oqto-ui/platform/flash-hosts.ts",
+		"src/oqto-ui/platform/flash-platform.ts",
+		"src/oqto-ui/platform/flash-session-chat.ts"
+	]
 }

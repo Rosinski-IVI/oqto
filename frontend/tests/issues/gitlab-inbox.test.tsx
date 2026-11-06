@@ -8,6 +8,9 @@ import type {
 } from "@/src/oqto-ui/platform/gitlab-contract";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
+import { initI18n } from "../../lib/i18n";
+
+initI18n();
 
 const event: GitLabInboxEvent = {
 	id: "event-1",
@@ -137,7 +140,7 @@ describe("GitLab inbox workflow", () => {
 		await screen.findByText("Add the feature");
 		fireEvent.click(screen.getByRole("button", { name: "Activity inbox" }));
 		fireEvent.click(screen.getByRole("button", { name: "Plan in session" }));
-		expect(onPlan).toHaveBeenCalledWith(event);
+		await waitFor(() => expect(onPlan).toHaveBeenCalledWith(event));
 
 		fireEvent.click(screen.getByRole("button", { name: "Propose comment" }));
 		fireEvent.change(screen.getByLabelText("Comment"), {

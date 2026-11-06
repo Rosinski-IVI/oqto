@@ -1,3 +1,4 @@
+import { useGitLabUnreadCounts } from "@/hooks/use-gitlab-unread-counts";
 import { useQueryClient } from "@tanstack/react-query";
 import {
 	ArrowDown,
@@ -14,7 +15,7 @@ import {
 	Shield,
 	Sun,
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import type {
@@ -52,10 +53,7 @@ export function NavigationRail({
 	const creating = useRef(false);
 	const [pending, setPending] = useState(false);
 	const [creationFailed, setCreationFailed] = useState(false);
-	const [gitlabCounts, setGitlabCounts] = useState<{
-		total: number;
-		byWorkspacePath: Readonly<Record<string, number>>;
-	}>({ total: 0, byWorkspacePath: {} });
+	const gitlabCounts = useGitLabUnreadCounts(platform.gitlab);
 	const createSession = async () => {
 		if (!platform.createSession || creating.current) return;
 		creating.current = true;
@@ -80,37 +78,6 @@ export function NavigationRail({
 	const [disclosedIds, setDisclosedIds] = useState<ReadonlySet<string>>(
 		() => new Set([workDirectoryId]),
 	);
-	// useeffect-guardrail: allow - maintain live and periodic unread badge counts
-	useEffect(() => {
-		const gitlab = platform.gitlab;
-		if (!gitlab) return;
-		let active = true;
-		const load = () => {
-			void gitlab
-				.unreadCounts()
-				.then((counts) => {
-					if (active) setGitlabCounts(counts);
-				})
-				.catch(() => undefined);
-		};
-		load();
-		const stopWatching = gitlab.watchInboxUpdates?.((counts) => {
-			if (!active) return;
-			setGitlabCounts((current) => ({
-				total: counts.total,
-				byWorkspacePath: {
-					...current.byWorkspacePath,
-					...counts.byWorkspacePath,
-				},
-			}));
-		});
-		const timer = window.setInterval(load, 60_000);
-		return () => {
-			active = false;
-			window.clearInterval(timer);
-			stopWatching?.();
-		};
-	}, [platform.gitlab]);
 	const toggleDisclosure = (id: string) => {
 		setDisclosedIds((current) => {
 			const next = new Set(current);

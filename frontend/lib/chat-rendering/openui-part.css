@@ -269,6 +269,7 @@
 .wb-openui__bar-fill {
 	background: var(--primary);
 	height: 100%;
+	width: var(--bar-width);
 }
 .wb-openui__bar-fill[data-series="1"] {
 	background: var(--danger);
@@ -330,6 +331,7 @@
 }
 .wb-openui__share-bar span {
 	background: var(--primary);
+	width: var(--share-width);
 }
 .wb-openui__share-bar span[data-series="1"] {
 	background: var(--danger);
