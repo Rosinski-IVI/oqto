@@ -21,11 +21,11 @@ import {
 	sharedWorkspaceSessionMap,
 } from "@/components/contexts/chat-context";
 import { getChatMessages } from "@/lib/api/chat";
+import type { SessionConfig } from "@/lib/canonical-types";
 import {
 	CHAT_FIRST_RESPONSE_TIMEOUT_MS,
 	CHAT_STREAM_IDLE_TIMEOUT_MS,
 } from "@/lib/chat-timeouts";
-import type { SessionConfig } from "@/lib/canonical-types";
 import {
 	createPiSessionId,
 	getWorkspaceModelStorageKey,

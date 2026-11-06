@@ -73,7 +73,10 @@ describe("GitLab inbox workflow", () => {
 				gitlabUsername: "alice",
 			}),
 			saveConfig: vi.fn(),
-			testConnection: vi.fn(async () => ({ username: "alice", credentialRevision: "1" })),
+			testConnection: vi.fn(async () => ({
+				username: "alice",
+				credentialRevision: "1",
+			})),
 			disconnect: vi.fn(),
 			getMapping: async () => ({
 				workspacePath: "/work/repo",
@@ -112,7 +115,9 @@ describe("GitLab inbox workflow", () => {
 			commit: vi.fn(),
 			branches: { list: vi.fn(), switch: vi.fn() },
 			remote: vi.fn(),
-			remotes: async () => [{ name: "origin", url: "https://gitlab.example/team/repo.git" }],
+			remotes: async () => [
+				{ name: "origin", url: "https://gitlab.example/team/repo.git" },
+			],
 		};
 		const onPlan = vi.fn();
 		const onStartImplementation = vi.fn();
@@ -138,7 +143,9 @@ describe("GitLab inbox workflow", () => {
 		fireEvent.change(screen.getByLabelText("Comment"), {
 			target: { value: "A proposed comment" },
 		});
-		fireEvent.click(screen.getByRole("button", { name: "Submit for approval" }));
+		fireEvent.click(
+			screen.getByRole("button", { name: "Submit for approval" }),
+		);
 		await screen.findByText("comment for issue #42");
 		expect(host.createProposal).toHaveBeenCalledWith({
 			workspacePath: "/work/repo",
@@ -152,6 +159,8 @@ describe("GitLab inbox workflow", () => {
 		expect(host.approveProposal).not.toHaveBeenCalled();
 
 		fireEvent.click(screen.getByRole("button", { name: "Approve" }));
-		await waitFor(() => expect(host.approveProposal).toHaveBeenCalledWith("proposal-1"));
+		await waitFor(() =>
+			expect(host.approveProposal).toHaveBeenCalledWith("proposal-1"),
+		);
 	});
 });

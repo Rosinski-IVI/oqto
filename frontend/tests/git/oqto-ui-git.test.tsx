@@ -111,7 +111,9 @@ describe("git adapter", () => {
 			channel: "git",
 			type: "remotes_result",
 			id: "git-1",
-			remotes: [{ name: "origin", url: "https://gitlab.example/team/repo.git" }],
+			remotes: [
+				{ name: "origin", url: "https://gitlab.example/team/repo.git" },
+			],
 		});
 		expect(await pending).toEqual([
 			{ name: "origin", url: "https://gitlab.example/team/repo.git" },

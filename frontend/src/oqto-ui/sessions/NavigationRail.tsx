@@ -80,21 +80,28 @@ export function NavigationRail({
 	const [disclosedIds, setDisclosedIds] = useState<ReadonlySet<string>>(
 		() => new Set([workDirectoryId]),
 	);
+	// useeffect-guardrail: allow - maintain live and periodic unread badge counts
 	useEffect(() => {
 		const gitlab = platform.gitlab;
 		if (!gitlab) return;
 		let active = true;
 		const load = () => {
-			void gitlab.unreadCounts().then((counts) => {
-				if (active) setGitlabCounts(counts);
-			}).catch(() => undefined);
+			void gitlab
+				.unreadCounts()
+				.then((counts) => {
+					if (active) setGitlabCounts(counts);
+				})
+				.catch(() => undefined);
 		};
 		load();
 		const stopWatching = gitlab.watchInboxUpdates?.((counts) => {
 			if (!active) return;
 			setGitlabCounts((current) => ({
 				total: counts.total,
-				byWorkspacePath: { ...current.byWorkspacePath, ...counts.byWorkspacePath },
+				byWorkspacePath: {
+					...current.byWorkspacePath,
+					...counts.byWorkspacePath,
+				},
 			}));
 		});
 		const timer = window.setInterval(load, 60_000);
@@ -166,7 +173,10 @@ export function NavigationRail({
 				</span>
 				<span className="wb-sessions-header__count">({sessionCount})</span>
 				{gitlabCounts.total > 0 && (
-					<span className="wb-gitlab-unread" aria-label={`${gitlabCounts.total} unread GitLab events`}>
+					<span
+						className="wb-gitlab-unread"
+						aria-label={`${gitlabCounts.total} unread GitLab events`}
+					>
 						{gitlabCounts.total}
 					</span>
 				)}

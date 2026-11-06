@@ -60,16 +60,16 @@ export interface GitLabInboxEvent {
 export type GitLabProposalDraft =
 	| { kind: "start_implementation"; sessionId?: string }
 	| {
-		kind: "update_issue";
-		sessionId?: string;
-		title?: string;
-		description?: string;
-		labels?: readonly string[];
-		stateEvent?: "close" | "reopen";
-	}
+			kind: "update_issue";
+			sessionId?: string;
+			title?: string;
+			description?: string;
+			labels?: readonly string[];
+			stateEvent?: "close" | "reopen";
+	  }
 	| { kind: "comment"; sessionId?: string; body: string }
 	| {
-		kind: "inline_review";
+			kind: "inline_review";
 			sessionId?: string;
 			mergeRequestIid: number;
 			comments: readonly {
@@ -77,15 +77,15 @@ export type GitLabProposalDraft =
 				line: number;
 				side: "old" | "new";
 				body: string;
-		}[];
-	}
+			}[];
+	  }
 	| {
-		kind: "discussion_reply";
-		sessionId?: string;
-		mergeRequestIid: number;
-		discussionId: string;
-		body: string;
-	};
+			kind: "discussion_reply";
+			sessionId?: string;
+			mergeRequestIid: number;
+			discussionId: string;
+			body: string;
+	  };
 
 export interface GitLabProposal {
 	readonly id: string;
@@ -95,7 +95,13 @@ export interface GitLabProposal {
 	readonly sessionId: string | null;
 	readonly kind: GitLabProposalDraft["kind"];
 	readonly payload: unknown;
-	readonly status: "pending" | "approved" | "rejected" | "applied" | "failed" | "expired";
+	readonly status:
+		| "pending"
+		| "approved"
+		| "rejected"
+		| "applied"
+		| "failed"
+		| "expired";
 	readonly createdAt: string;
 	readonly sessionStale: boolean;
 }
@@ -112,7 +118,9 @@ export interface GitLabHost {
 		enabled: boolean;
 		eventCategories: readonly GitLabEventCategory[];
 	}): Promise<GitLabConnection>;
-	testConnection(workspacePath: string): Promise<{ username: string; credentialRevision: string }>;
+	testConnection(
+		workspacePath: string,
+	): Promise<{ username: string; credentialRevision: string }>;
 	disconnect(): Promise<void>;
 	getMapping(workspacePath: string): Promise<GitLabProjectMapping | null>;
 	saveMapping(input: {
@@ -121,19 +129,31 @@ export interface GitLabHost {
 		projectPathOverride?: string;
 	}): Promise<GitLabProjectMapping>;
 	removeMapping(workspacePath: string): Promise<void>;
-	inbox(workspacePath: string, poll?: boolean): Promise<readonly GitLabInboxEvent[]>;
+	inbox(
+		workspacePath: string,
+		poll?: boolean,
+	): Promise<readonly GitLabInboxEvent[]>;
 	listIssues(workspacePath: string): Promise<GitLabTicketList>;
-	selectIssue(workspacePath: string, sessionId: string, issueIid: number): Promise<void>;
+	selectIssue(
+		workspacePath: string,
+		sessionId: string,
+		issueIid: number,
+	): Promise<void>;
 	markRead(eventId: string): Promise<void>;
 	unreadCounts(): Promise<GitLabUnreadCounts>;
-	watchInboxUpdates?(listener: (counts: GitLabUnreadCounts) => void): () => void;
+	watchInboxUpdates?(
+		listener: (counts: GitLabUnreadCounts) => void,
+	): () => void;
 	proposals(workspacePath: string): Promise<readonly GitLabProposal[]>;
 	createProposal(input: {
 		workspacePath: string;
 		issueIid: number;
 		proposal: GitLabProposalDraft;
 	}): Promise<GitLabProposal>;
-	approveProposal(id: string, overwriteStale?: boolean): Promise<GitLabProposal>;
+	approveProposal(
+		id: string,
+		overwriteStale?: boolean,
+	): Promise<GitLabProposal>;
 	rebindProposal(id: string, sessionId: string): Promise<GitLabProposal>;
 	rejectProposal(id: string): Promise<void>;
 	createOrUpdateDraft(input: {

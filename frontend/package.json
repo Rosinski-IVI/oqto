@@ -121,7 +121,5 @@
 		"vite": "^5.4.10",
 		"vitest": "^3.2.4"
 	},
-	"trustedDependencies": [
-		"@byteowlz/oqto-app-sdk"
-	]
+	"trustedDependencies": ["@byteowlz/oqto-app-sdk"]
 }

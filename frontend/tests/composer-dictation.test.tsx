@@ -20,7 +20,12 @@ function sample(patch: Partial<UseDictationReturn> = {}): UseDictationReturn {
 		dismissError: vi.fn(),
 		preparation: null,
 		download: null,
-		recognition: { provider: "moonshine", language: "en", wakeEnabled: false, wakePhrase: "hey_oqto" },
+		recognition: {
+			provider: "moonshine",
+			language: "en",
+			wakeEnabled: false,
+			wakePhrase: "hey_oqto",
+		},
 		remoteAvailable: false,
 		setRecognitionProvider: vi.fn(),
 		setRecognitionLanguage: vi.fn(),

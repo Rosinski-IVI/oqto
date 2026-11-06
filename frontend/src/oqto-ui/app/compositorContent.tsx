@@ -225,7 +225,9 @@ export function createContentRenderer(
 								`Help me plan GitLab issue #${issue.entityIid}: ${issue.title}. Discuss an approach before making changes. ${issue.summary}`,
 								"prompt",
 							);
-						})().catch((error: unknown) => console.error("GitLab issue selection failed", error));
+						})().catch((error: unknown) =>
+							console.error("GitLab issue selection failed", error),
+						);
 					}}
 					onStartGitLabImplementation={(issue, approvedSessionId) => {
 						const targetSession = approvedSessionId ?? context.session.id;
@@ -240,7 +242,9 @@ export function createContentRenderer(
 								`Implementation was approved for GitLab issue #${issue.entityIid}: ${issue.title}. Start implementation in this workspace. ${issue.summary}`,
 								"prompt",
 							);
-						})().catch((error: unknown) => console.error("GitLab implementation start failed", error));
+						})().catch((error: unknown) =>
+							console.error("GitLab implementation start failed", error),
+						);
 					}}
 					onAddressGitLabComment={(event) => {
 						const targetSession = context.session.id;
@@ -257,7 +261,9 @@ export function createContentRenderer(
 								`Address GitLab merge request discussion ${event.discussionId ?? ""} for issue #${event.relatedIssueIid ?? "unknown"}: ${event.summary}. Read the selected ticket and its linked merge request, then propose a thread reply or implementation changes.`,
 								"prompt",
 							);
-						})().catch((error: unknown) => console.error("GitLab discussion routing failed", error));
+						})().catch((error: unknown) =>
+							console.error("GitLab discussion routing failed", error),
+						);
 					}}
 					chrome={presentation.chrome}
 				/>

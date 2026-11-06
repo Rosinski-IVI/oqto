@@ -16,10 +16,10 @@ import type {
 } from "./contracts";
 import { DEFAULT_OQTO_UI_CONFIG } from "./contracts";
 import { liveChatTransport } from "./live-chat-transport";
+import { createLiveGitLabHost } from "./live-gitlab";
 import { createLiveSelectionHost } from "./live-selection";
 import { type MuxSocket, createMuxFileSystem } from "./mux-files";
 import { createMuxGitHost } from "./mux-git";
-import { createLiveGitLabHost } from "./live-gitlab";
 import { createMuxIssueHost } from "./mux-issues";
 import { createMuxTerminalHost } from "./mux-terminal";
 import { muxWebSocketUrl } from "./mux-url";

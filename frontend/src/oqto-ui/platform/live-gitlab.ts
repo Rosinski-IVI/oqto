@@ -10,8 +10,8 @@ import type {
 	GitLabTicketList,
 	GitLabUnreadCounts,
 } from "./gitlab-contract";
-import type { MuxSocket } from "./mux-files";
 import type { IssueStatus } from "./issues-contract";
+import type { MuxSocket } from "./mux-files";
 
 type WireRecord = Record<string, unknown>;
 
@@ -21,7 +21,11 @@ function record(value: unknown): WireRecord | null {
 		: null;
 }
 
-async function request(path: string, method = "GET", body?: unknown): Promise<unknown> {
+async function request(
+	path: string,
+	method = "GET",
+	body?: unknown,
+): Promise<unknown> {
 	const response = await fetch(path, {
 		method,
 		credentials: "include",
@@ -67,7 +71,7 @@ function connection(value: unknown): GitLabConnection | null {
 		? raw.event_categories.filter(
 				(item): item is GitLabEventCategory =>
 					typeof item === "string" && allowed.has(item as GitLabEventCategory),
-			  )
+			)
 		: [];
 	return {
 		host: string(raw.host),
@@ -78,7 +82,8 @@ function connection(value: unknown): GitLabConnection | null {
 		eventCategories: categories,
 		credentialReady: raw.credential_ready === true,
 		connected: raw.connected === true,
-		gitlabUsername: typeof raw.gitlab_username === "string" ? raw.gitlab_username : null,
+		gitlabUsername:
+			typeof raw.gitlab_username === "string" ? raw.gitlab_username : null,
 	};
 }
 
@@ -104,8 +109,9 @@ function event(value: unknown): GitLabInboxEvent | null {
 	const categories = Array.isArray(raw.categories)
 		? raw.categories.filter(
 				(item): item is GitLabEventCategory =>
-					typeof item === "string" && validCategories.has(item as GitLabEventCategory),
-			  )
+					typeof item === "string" &&
+					validCategories.has(item as GitLabEventCategory),
+			)
 		: [];
 	return {
 		id: string(raw.id),
@@ -115,8 +121,10 @@ function event(value: unknown): GitLabInboxEvent | null {
 		categories,
 		entityKind: raw.entity_kind === "merge_request" ? "merge_request" : "issue",
 		entityIid: number(raw.entity_iid),
-		relatedIssueIid: raw.related_issue_iid === null ? null : number(raw.related_issue_iid),
-		discussionId: typeof raw.discussion_id === "string" ? raw.discussion_id : null,
+		relatedIssueIid:
+			raw.related_issue_iid === null ? null : number(raw.related_issue_iid),
+		discussionId:
+			typeof raw.discussion_id === "string" ? raw.discussion_id : null,
 		sessionId: typeof raw.session_id === "string" ? raw.session_id : null,
 		title: string(raw.title),
 		summary: string(raw.summary),
@@ -141,18 +149,27 @@ function ticket(value: unknown): GitLabTicket | null {
 		iid: number(raw.iid),
 		id: string(raw.id, String(number(raw.iid))),
 		title: string(raw.title),
-		status: statuses.includes(candidate as IssueStatus) ? candidate as IssueStatus : "open",
+		status: statuses.includes(candidate as IssueStatus)
+			? (candidate as IssueStatus)
+			: "open",
 		priority: number(raw.priority) || 3,
 		kind: string(raw.issue_type, "issue"),
 		state: raw.state === "closed" ? "closed" : "opened",
 		parentId: typeof raw.parent_id === "string" ? raw.parent_id : null,
-		blockedBy: Array.isArray(raw.blocked_by) ? raw.blocked_by.filter((value): value is string => typeof value === "string") : [],
-		labels: Array.isArray(raw.labels) ? raw.labels.filter((value): value is string => typeof value === "string") : [],
+		blockedBy: Array.isArray(raw.blocked_by)
+			? raw.blocked_by.filter(
+					(value): value is string => typeof value === "string",
+				)
+			: [],
+		labels: Array.isArray(raw.labels)
+			? raw.labels.filter((value): value is string => typeof value === "string")
+			: [],
 		description: string(raw.description),
 		webUrl: typeof raw.web_url === "string" ? raw.web_url : null,
 		updatedAt: string(raw.updated_at),
 		statusConflict: raw.status_conflict === true,
-		mergeRequestIid: typeof raw.merge_request_iid === "number" ? raw.merge_request_iid : null,
+		mergeRequestIid:
+			typeof raw.merge_request_iid === "number" ? raw.merge_request_iid : null,
 	};
 }
 
@@ -190,7 +207,9 @@ function wireProposalDraft(draft: GitLabProposalDraft): WireRecord {
 					? {}
 					: { description: draft.description }),
 				...(draft.labels === undefined ? {} : { labels: draft.labels }),
-				...(draft.stateEvent === undefined ? {} : { state_event: draft.stateEvent }),
+				...(draft.stateEvent === undefined
+					? {}
+					: { state_event: draft.stateEvent }),
 			};
 		case "comment":
 			return {
@@ -276,17 +295,25 @@ export function createLiveGitLabHost(openSocket?: () => MuxSocket): GitLabHost {
 		},
 		async inbox(workspacePath, poll = false) {
 			const value = poll
-				? await request("/api/gitlab/inbox/poll", "POST", { workspace_path: workspacePath })
+				? await request("/api/gitlab/inbox/poll", "POST", {
+						workspace_path: workspacePath,
+					})
 				: await request(`/api/gitlab/inbox${query(workspacePath)}`);
 			return Array.isArray(value)
-				? value.map(event).filter((item): item is GitLabInboxEvent => item !== null)
+				? value
+						.map(event)
+						.filter((item): item is GitLabInboxEvent => item !== null)
 				: [];
 		},
 		async listIssues(workspacePath): Promise<GitLabTicketList> {
-			const raw = record(await request(`/api/gitlab/issues${query(workspacePath)}`));
+			const raw = record(
+				await request(`/api/gitlab/issues${query(workspacePath)}`),
+			);
 			return {
 				issues: Array.isArray(raw?.issues)
-					? raw.issues.map(ticket).filter((item): item is GitLabTicket => item !== null)
+					? raw.issues
+							.map(ticket)
+							.filter((item): item is GitLabTicket => item !== null)
 					: [],
 				truncated: raw?.truncated === true,
 			};
@@ -299,7 +326,11 @@ export function createLiveGitLabHost(openSocket?: () => MuxSocket): GitLabHost {
 			});
 		},
 		async markRead(eventId) {
-			await request(`/api/gitlab/inbox/${encodeURIComponent(eventId)}/read`, "POST", {});
+			await request(
+				`/api/gitlab/inbox/${encodeURIComponent(eventId)}/read`,
+				"POST",
+				{},
+			);
 		},
 		async unreadCounts() {
 			const raw = record(await request("/api/gitlab/inbox/counts"));
@@ -324,18 +355,21 @@ export function createLiveGitLabHost(openSocket?: () => MuxSocket): GitLabHost {
 				} catch {
 					return;
 				}
-				if (raw?.channel !== "system" || raw.type !== "gitlab_inbox_updated") return;
-			const workspacePath = string(raw.workspace_path);
-			const count = number(raw.workspace_unread);
-			listener({
-				total: number(raw.total_unread),
-				byWorkspacePath: workspacePath ? { [workspacePath]: count } : {},
-			});
+				if (raw?.channel !== "system" || raw.type !== "gitlab_inbox_updated")
+					return;
+				const workspacePath = string(raw.workspace_path);
+				const count = number(raw.workspace_unread);
+				listener({
+					total: number(raw.total_unread),
+					byWorkspacePath: workspacePath ? { [workspacePath]: count } : {},
+				});
 			};
 			return () => socket.close();
 		},
 		async proposals(workspacePath) {
-			const value = await request(`/api/gitlab/proposals${query(workspacePath)}`);
+			const value = await request(
+				`/api/gitlab/proposals${query(workspacePath)}`,
+			);
 			return Array.isArray(value) ? value.map(proposal) : [];
 		},
 		async createProposal(input) {
