@@ -17,11 +17,12 @@ use axum::{
     },
     response::Response,
 };
+use dashmap::DashMap;
 use futures::{SinkExt, StreamExt};
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use tokio::sync::{Mutex, Semaphore, mpsc, oneshot};
+use tokio::sync::{Mutex, OnceCell, Semaphore, mpsc, oneshot};
 use tracing::{debug, error, info, warn};
 
 use chrono::Utc;
@@ -62,10 +63,12 @@ struct ClientIdEntry {
 
 static RECENT_CLIENT_IDS: Lazy<tokio::sync::RwLock<HashMap<String, ClientIdEntry>>> =
     Lazy::new(|| tokio::sync::RwLock::new(HashMap::new()));
+static GITLAB_RPC_REQUESTS: Lazy<DashMap<String, (Arc<OnceCell<()>>, Instant)>> =
+    Lazy::new(DashMap::new);
 
 mod agent;
 mod files;
-mod git;
+pub(crate) mod git;
 mod history;
 mod machine_intent;
 mod terminal;
@@ -269,6 +272,12 @@ pub enum GitWsCommand {
     },
     /// Local branches, and which checkout owns each.
     Branches {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        id: Option<String>,
+        workspace_path: String,
+    },
+    /// Fetch remote URLs with embedded credentials stripped before returning.
+    Remotes {
         #[serde(skip_serializing_if = "Option::is_none")]
         id: Option<String>,
         workspace_path: String,
@@ -840,6 +849,11 @@ pub enum GitWsEvent {
         current: String,
         branches: Vec<GitBranch>,
     },
+    RemotesResult {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        id: Option<String>,
+        remotes: Vec<GitRemoteEntry>,
+    },
     SwitchResult {
         #[serde(skip_serializing_if = "Option::is_none")]
         id: Option<String>,
@@ -882,6 +896,12 @@ pub struct GitBranch {
     pub current: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub worktree: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct GitRemoteEntry {
+    pub name: String,
+    pub url: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -944,6 +964,13 @@ pub enum SystemWsEvent {
         change_type: String,
         #[serde(skip_serializing_if = "Option::is_none")]
         detail: Option<Value>,
+    },
+    /// User-scoped GitLab inbox invalidation; ticket text stays in the API.
+    #[serde(rename = "gitlab_inbox_updated")]
+    GitLabInboxUpdated {
+        workspace_path: String,
+        total_unread: i64,
+        workspace_unread: i64,
     },
 }
 
@@ -1184,6 +1211,15 @@ async fn handle_multiplexed_ws(
                     workspace_id,
                     change_type: change,
                     detail,
+                })),
+                LegacyHubEvent::GitLabInboxUpdated {
+                    workspace_path,
+                    total_unread,
+                    workspace_unread,
+                } => Some(WsEvent::System(SystemWsEvent::GitLabInboxUpdated {
+                    workspace_path,
+                    total_unread,
+                    workspace_unread,
                 })),
                 _ => None,
             }
@@ -1705,6 +1741,7 @@ fn ws_command_id(cmd: &WsCommand) -> Option<String> {
             | GitWsCommand::Unstage { id, .. }
             | GitWsCommand::Commit { id, .. }
             | GitWsCommand::Branches { id, .. }
+            | GitWsCommand::Remotes { id, .. }
             | GitWsCommand::Switch { id, .. }
             | GitWsCommand::Fetch { id, .. }
             | GitWsCommand::Pull { id, .. }
@@ -1853,6 +1890,7 @@ fn ws_command_summary(cmd: &WsCommand) -> (String, Option<String>, Option<String
                 GitWsCommand::Unstage { .. } => "git.unstage",
                 GitWsCommand::Commit { .. } => "git.commit",
                 GitWsCommand::Branches { .. } => "git.branches",
+                GitWsCommand::Remotes { .. } => "git.remotes",
                 GitWsCommand::Switch { .. } => "git.switch",
                 GitWsCommand::Fetch { .. } => "git.fetch",
                 GitWsCommand::Pull { .. } => "git.pull",
@@ -1866,6 +1904,7 @@ fn ws_command_summary(cmd: &WsCommand) -> (String, Option<String>, Option<String
                 | GitWsCommand::Unstage { workspace_path, .. }
                 | GitWsCommand::Commit { workspace_path, .. }
                 | GitWsCommand::Branches { workspace_path, .. }
+                | GitWsCommand::Remotes { workspace_path, .. }
                 | GitWsCommand::Switch { workspace_path, .. }
                 | GitWsCommand::Fetch { workspace_path, .. }
                 | GitWsCommand::Pull { workspace_path, .. }
@@ -2232,6 +2271,8 @@ async fn handle_get_messages(
 async fn forward_pi_events(
     runner: &RunnerClient,
     session_id: &str,
+    account_id: &str,
+    state: AppState,
     event_tx: mpsc::UnboundedSender<WsEvent>,
     conn_state: Arc<tokio::sync::Mutex<WsConnectionState>>,
     mut sub_ready_tx: Option<oneshot::Sender<()>>,
@@ -2297,6 +2338,80 @@ async fn forward_pi_events(
                     {
                         seen_event_ids.remove(&expired);
                     }
+                    if let Some((ui_request_id, rpc_request, rpc_error)) = gitlab_rpc_input(&canonical_event) {
+                        GITLAB_RPC_REQUESTS
+                            .retain(|_, (_, created)| created.elapsed() < Duration::from_secs(600));
+                        let key = format!("{session_id}:{ui_request_id}");
+                        let response_cell = GITLAB_RPC_REQUESTS
+                            .entry(key)
+                            .or_insert_with(|| (Arc::new(OnceCell::new()), Instant::now()))
+                            .value()
+                            .0
+                            .clone();
+                        let state_for_rpc = state.clone();
+                        let runner_for_rpc = runner.clone();
+                        let account_for_rpc = account_id.to_owned();
+                        let session_for_rpc = session_id.to_owned();
+                        let ui_request_id_for_rpc = ui_request_id.clone();
+                        response_cell
+                            .get_or_init(|| async move {
+                                let (response_request_id, response) = match rpc_request {
+                                    Some(request) => {
+                                        let request_id = request.request_id.clone();
+                                        let response = crate::api::handlers::gitlab::handle_agent_rpc(
+                                            &state_for_rpc,
+                                            &account_for_rpc,
+                                            &session_for_rpc,
+                                            request,
+                                        )
+                                        .await;
+                                        let response = match response {
+                                            Ok(result) => json!({
+                                                "version": 1,
+                                                "request_id": request_id.clone(),
+                                                "ok": true,
+                                                "result": result,
+                                            }),
+                                            Err(error) => json!({
+                                                "version": 1,
+                                                "request_id": request_id.clone(),
+                                                "ok": false,
+                                                "error": error.to_string(),
+                                            }),
+                                        };
+                                        (request_id, response)
+                                    }
+                                    None => {
+                                        let response = json!({
+                                            "version": 1,
+                                            "request_id": ui_request_id_for_rpc.clone(),
+                                            "ok": false,
+                                            "error": rpc_error.unwrap_or_else(|| "GitLab RPC request is invalid".to_owned()),
+                                        });
+                                        (ui_request_id_for_rpc.clone(), response)
+                                    }
+                                };
+                                match serde_json::to_string(&response) {
+                                    Ok(value) => {
+                                        if let Err(error) = runner_for_rpc
+                                            .pi_extension_ui_response(
+                                                &session_for_rpc,
+                                                &ui_request_id_for_rpc,
+                                                Some(&value),
+                                                None,
+                                                Some(false),
+                                            )
+                                            .await
+                                        {
+                                            warn!(session_id, request_id = %response_request_id, error = %error, "GitLab agent RPC response failed");
+                                        }
+                                    }
+                                    Err(error) => warn!(session_id, error = %error, "GitLab agent RPC response serialization failed"),
+                                }
+                            })
+                            .await;
+                        continue;
+                    }
                     clear_response_watchdog(&conn_state, session_id).await;
                     if event_tx.send(WsEvent::Agent(canonical_event)).is_err() {
                         return Ok(());
@@ -2356,6 +2471,24 @@ async fn forward_pi_events(
         ))
         .await;
     }
+}
+
+fn gitlab_rpc_input(
+    event: &oqto_protocol::events::Event,
+) -> Option<(
+    String,
+    Option<oqto_protocol::gitlab::GitLabAgentRpcRequest>,
+    Option<String>,
+)> {
+    let oqto_protocol::events::EventPayload::GitLabAgentRpc {
+        ui_request_id,
+        request,
+        error,
+    } = &event.payload
+    else {
+        return None;
+    };
+    Some((ui_request_id.clone(), request.clone(), error.clone()))
 }
 
 // NOTE: The old pi_event_to_ws_event() function has been removed.
@@ -2922,6 +3055,40 @@ mod tests {
             }
             _ => panic!("Expected Agent GetState command"),
         }
+    }
+
+    #[test]
+    fn gitlab_agent_rpc_is_intercepted_as_typed_session_input() {
+        use oqto_protocol::events::{Event, EventPayload};
+        let event = Event {
+            session_id: "ses_123".into(),
+            runner_id: "local".into(),
+            ts: 1,
+            payload: EventPayload::GitLabAgentRpc {
+                ui_request_id: "pi-ui-1".into(),
+                request: Some(oqto_protocol::gitlab::GitLabAgentRpcRequest {
+                    version: 1,
+                    request_id: "rpc-1".into(),
+                    operation: oqto_protocol::gitlab::GitLabAgentOperation::ReadSelectedIssue,
+                }),
+                error: None,
+            },
+        };
+        let (ui_request_id, Some(request), None) = gitlab_rpc_input(&event).expect("GitLab RPC marker") else {
+            panic!("expected a valid GitLab RPC request");
+        };
+        assert_eq!(ui_request_id, "pi-ui-1");
+        assert_eq!(request.request_id, "rpc-1");
+
+        let forged = Event {
+            payload: EventPayload::GitLabAgentRpc {
+                ui_request_id: "pi-ui-2".into(),
+                request: None,
+                error: Some("GitLab RPC request is invalid".into()),
+            },
+            ..event
+        };
+        assert!(matches!(gitlab_rpc_input(&forged), Some((_, None, Some(_))));
     }
 
     #[test]

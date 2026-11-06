@@ -10,6 +10,7 @@ pub(crate) async fn handle_request(runner: &Runner, req: RunnerRequest) -> Runne
             credential_id,
         } => credentials::describe(runner, account_id, credential_id).await,
         RunnerRequest::CredentialHttp(request) => credentials::http(runner, request).await,
+        RunnerRequest::GitLabHttp(request) => credentials::gitlab(runner, request).await,
         RunnerRequest::ManageCredentials(request) => credentials::manage(runner, request).await,
         RunnerRequest::RecordHostAction {
             workspace_id,

@@ -73,7 +73,7 @@ comrak = { version = "0.49", default-features = false, features = ["syntect"] }
 syntect = { version = "5.3", default-features = false, features = ["default-syntaxes", "default-themes", "html", "regex-fancy"] }
 
 # HTTP client
-reqwest = { version = "0.12", default-features = false, features = ["json", "stream", "rustls-tls"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "stream", "rustls-tls-native-roots"] }
 reqwest-eventsource = "0.6"
 
 # Concurrent data structures
@@ -175,4 +175,3 @@ derivable_impls = "warn"
 too_many_arguments = "allow"
 type_complexity = "allow"
 module_inception = "allow"
-

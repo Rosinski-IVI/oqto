@@ -770,6 +770,9 @@ impl Runner {
         if matches!(req, RunnerRequest::ManageCredentials(_)) {
             return "manage_credentials".to_owned();
         }
+        if matches!(req, RunnerRequest::GitLabHttp(_)) {
+            return "gitlab_http".to_owned();
+        }
         serde_json::to_value(req)
             .ok()
             .and_then(|v| {
@@ -795,7 +798,9 @@ impl Runner {
             RunnerRequest::RepairWorkspaceChatHistory(_) | RunnerRequest::ManageCredentials(_) => {
                 std::time::Duration::from_secs(120)
             }
-            RunnerRequest::CredentialHttp(_) | RunnerRequest::DescribeCredential { .. } => {
+            RunnerRequest::CredentialHttp(_)
+            | RunnerRequest::GitLabHttp(_)
+            | RunnerRequest::DescribeCredential { .. } => {
                 std::time::Duration::from_secs(120)
             }
             RunnerRequest::RunAppOperation(_) => std::time::Duration::from_secs(305),

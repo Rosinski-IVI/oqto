@@ -148,6 +148,7 @@ try {
 			result.response?.success === true &&
 			result.response?.data?.disposition === "handled" &&
 			result.probeResult?.mode === "rpc" &&
+			(entry.name !== "pi-oqto-gitlab-workflow" || result.probeResult?.tools?.includes("oqto_gitlab")) &&
 			errors.length === 0 &&
 			!/Failed to load|Error loading|SyntaxError|TypeError/.test(result.stderr);
 		console.log(`${ok ? "PASS" : "FAIL"} ${name}`);

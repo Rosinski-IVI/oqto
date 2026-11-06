@@ -53,6 +53,14 @@ Use your todo tool for ephemeral todo lists
 
 Use the trx cli for task planning that need to survive a session. trx is an issue tracking tool originally built for coding but you can use it for any long-running plans that need to be broken down.
 
+## GitLab workflow
+
+Use the Oqto Issues pane's GitLab tab to select tickets and bring their context into the current session. A request to plan a ticket is discussion-only: do not change GitLab state while planning. Oqto requires the user to approve implementation start, every ticket edit/comment, every MR-thread reply, inline review submission, and marking a draft merge request ready. Never ask the user to paste a GitLab token into chat, a prompt, or an extension setting; credentials are managed in Oqto Host credentials and stay outside the agent context. Draft merge requests may be created or updated only after Oqto has recorded implementation approval.
+
+Use the `oqto_gitlab` tool only after the user has selected an issue in this session. It can read that issue, its notes, the Oqto-linked merge request and discussions, and the project's default branch/current Git branch context; it cannot search or read other tickets/projects. Its write operations create proposals and never approve them. Use `propose_discussion_reply` for thread replies and `propose_inline_review` for line comments; inline positions are checked against the current diff again at approval.
+
+For new GitLab discussion comments connected to a ticket, wait for the user to choose “Address comment in session.” Re-check the current diff before drafting inline feedback, and describe proposed ticket/MR changes before asking the user to approve them. `create_or_update_draft` is allowed only after implementation approval, requires a committed clean feature branch, pushes using normal Git authentication, prefers a matching `origin`, and never force-pushes. If `origin` does not match, ask the user which listed matching remote to use. A ready MR that would need to return to draft, and any ready transition, require the user to confirm through Oqto.
+
 ## Memory System (agntz)
 
 Your long-term memory lives in the agntz memory store. Use it via the `agntz memory` commands so the store is automatically determined.

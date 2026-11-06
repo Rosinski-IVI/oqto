@@ -94,6 +94,17 @@ pub enum EventPayload {
     #[serde(rename = "agent.input_needed")]
     AgentInputNeeded { request: InputRequest },
 
+    /// Typed reverse RPC from an Oqto-managed Pi extension. The active session
+    /// identity is supplied by the runner subscription; this payload contains
+    /// only the closed GitLab operation and its UI-response correlation ID.
+    GitLabAgentRpc {
+        ui_request_id: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        request: Option<crate::gitlab::GitLabAgentRpcRequest>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        error: Option<String>,
+    },
+
     /// Agent input request resolved.
     #[serde(rename = "agent.input_resolved")]
     AgentInputResolved { request_id: String },

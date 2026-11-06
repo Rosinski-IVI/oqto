@@ -29,6 +29,7 @@ pub mod canon;
 pub mod commands;
 pub mod control;
 pub mod credential_connections;
+pub mod gitlab;
 pub mod credentials;
 pub mod delegation;
 pub use credentials::*;

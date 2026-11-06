@@ -37,6 +37,8 @@ pub enum RunnerRequest {
         credential_id: String,
     },
     CredentialHttp(oqto_protocol::credential_connections::CredentialHttpDispatch),
+    /// Trusted GitLab service only; the operation vocabulary fixes URL/method.
+    GitLabHttp(oqto_protocol::gitlab::GitLabHttpDispatch),
     /// Trusted controller only; not an agent/App capability.
     RecordHostAction {
         workspace_id: String,
@@ -347,6 +349,9 @@ pub enum RunnerResponse {
     CredentialsResult(oqto_protocol::CredentialManageResult),
     CredentialDescribed(oqto_protocol::credential_connections::CredentialDescriptor),
     CredentialHttpResult {
+        json: serde_json::Value,
+    },
+    GitLabHttpResult {
         json: serde_json::Value,
     },
     HostActionRecorded {

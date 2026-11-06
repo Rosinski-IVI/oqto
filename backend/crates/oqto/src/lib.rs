@@ -14,6 +14,7 @@ pub mod credentials;
 pub mod db;
 pub mod eavs;
 pub mod feedback;
+pub mod gitlab;
 pub mod history;
 pub mod identity;
 pub mod invite;

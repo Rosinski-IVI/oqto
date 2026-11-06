@@ -11,6 +11,9 @@ use std::{
 };
 use zeroize::Zeroizing;
 
+mod gitlab;
+pub use gitlab::{gitlab_authorized_use, gitlab_json};
+
 const CAP: usize = 256 * 1024;
 const DEADLINE: Duration = Duration::from_secs(10);
 
@@ -255,8 +258,20 @@ async fn execute(
         .map_err(|_| Error::Upstream)?;
     read_json(response, raw).await
 }
-async fn read_json(mut response: reqwest::Response, secret: &str) -> Result<JsonResult, Error> {
-    if !response.status().is_success() || response.content_length().is_some_and(|n| n > CAP as u64)
+async fn read_json(response: reqwest::Response, secret: &str) -> Result<JsonResult, Error> {
+    read_json_limited(response, secret, CAP).await
+}
+
+async fn read_json_limited(
+    mut response: reqwest::Response,
+    secret: &str,
+    cap: usize,
+) -> Result<JsonResult, Error> {
+    if secret.is_empty() {
+        return Err(Error::Credential);
+    }
+    if !response.status().is_success()
+        || response.content_length().is_some_and(|n| n > cap as u64)
     {
         return Err(Error::Output);
     }
@@ -270,7 +285,7 @@ async fn read_json(mut response: reqwest::Response, secret: &str) -> Result<Json
     }
     let mut body = Zeroizing::new(Vec::new());
     while let Some(chunk) = response.chunk().await.map_err(|_| Error::Upstream)? {
-        if chunk.len() > CAP - body.len() {
+        if chunk.len() > cap.saturating_sub(body.len()) {
             return Err(Error::Output);
         }
         body.extend_from_slice(&chunk);

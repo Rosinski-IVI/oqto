@@ -60,6 +60,84 @@ pub(super) async fn http(
     }
 }
 
+pub(super) async fn gitlab(
+    runner: &Runner,
+    request: oqto_protocol::gitlab::GitLabHttpDispatch,
+) -> RunnerResponse {
+    match execute_gitlab(runner, request).await {
+        Ok(json) => RunnerResponse::GitLabHttpResult { json },
+        // Never echo hostnames, operation bodies, credential IDs, or upstream
+        // error text into the runner protocol's diagnostic channel.
+        Err(_) => crate::daemon::server::error_response(
+            crate::protocol::ErrorCode::InvalidRequest,
+            "GitLab request denied or unavailable",
+        ),
+    }
+}
+
+async fn execute_gitlab(
+    runner: &Runner,
+    request: oqto_protocol::gitlab::GitLabHttpDispatch,
+) -> anyhow::Result<serde_json::Value> {
+    use anyhow::Context;
+    use oqto_credential_http::UseEvidence;
+    static REQUESTS: tokio::sync::Semaphore = tokio::sync::Semaphore::const_new(8);
+    let _permit = REQUESTS
+        .try_acquire()
+        .context("GitLab request capacity")?;
+    anyhow::ensure!(request.connection_revision > 0, "invalid GitLab revision");
+    anyhow::ensure!(
+        !request.audit_event_id.is_empty()
+            && request.audit_event_id.len() <= 128
+            && request.audit_event_id.bytes().all(|byte| {
+                byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-' | b'.')
+            }),
+        "invalid GitLab audit identity"
+    );
+    let event = format!("{}.dispatch", request.audit_event_id);
+    let home = std::env::var_os("HOME")
+        .map(std::path::PathBuf::from)
+        .filter(|path| path.is_absolute())
+        .context("runner home unavailable")?;
+    oqto_history::oqto_log::host_actions::append(
+        &home,
+        &request.workspace_path,
+        &oqto_history::oqto_log::host_actions::HostActionRecord {
+            event_id: event.clone(),
+            account_id: request.account_id.clone(),
+            action: "invoke".into(),
+            connection_id: "gitlab".into(),
+            connection_revision: Some(request.connection_revision),
+            instance_id: None,
+            slot: None,
+            content_digest: None,
+        },
+    )
+    .await?;
+    let secret = runner
+        .credentials
+        .resolve_dispatch(request.account_id.clone(), request.credential)
+        .await?;
+    let lease = oqto_credential_http::gitlab_authorized_use(
+        &request.host,
+        &request.path_prefix,
+        u64::from(request.connection_revision),
+        UseEvidence {
+            subject: request.account_id.clone(),
+            policy_revision: u64::from(request.connection_revision),
+            authorization_id: event.clone(),
+        },
+    )?;
+    let authority = AuditedSnapshot {
+        event,
+        account: request.account_id,
+        secret,
+    };
+    Ok(oqto_credential_http::gitlab_json(&authority, lease, request)
+        .await?
+        .json)
+}
+
 async fn execute(
     runner: &Runner,
     request: oqto_protocol::credential_connections::CredentialHttpDispatch,

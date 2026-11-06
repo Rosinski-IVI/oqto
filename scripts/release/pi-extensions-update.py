@@ -37,6 +37,7 @@ MANIFEST = ROOT / "dependencies.toml"
 POLICY = ROOT / "scripts/dist/pi-extension-supersessions.json"
 DEFAULTS = ROOT / "scripts/dist/pi-default-extensions.txt"
 LOAD_TEST = ROOT / "scripts/dist/test-shipped-extensions.mjs"
+FIRST_PARTY = ROOT / "scripts/dist/pi-first-party-extensions"
 REPO = "https://github.com/byteowlz/pi-agent-extensions.git"
 PIN = re.compile(r'^(pi-extensions\s*=\s*")([0-9a-f]{40})(".*)$', re.MULTILINE)
 
@@ -71,6 +72,11 @@ def default_extensions(path: Path | None = None) -> list[str]:
         for line in path.read_text().splitlines()
         if line.strip() and not line.lstrip().startswith("#")
     ]
+
+
+def first_party_extension(name: str) -> Path | None:
+    overlay = FIRST_PARTY / name
+    return overlay if (overlay / "index.ts").is_file() else None
 
 
 def current_pin(manifest: Path | None = None) -> str:
@@ -176,14 +182,20 @@ def qualify(args) -> dict:
             raise GateFailed(
                 f"ancestry: candidate {revision[:9]} does not contain pin {pinned[:9]}"
             )
-        missing = [n for n in names if not (repo / n / "index.ts").is_file()]
+        missing = [
+            name
+            for name in names
+            if first_party_extension(name) is None
+            and not (repo / name / "index.ts").is_file()
+        ]
         if missing:
             raise GateFailed(f"required: missing at candidate: {', '.join(missing)}")
         receipt["gates"].append({"gate": "required", "extensions": names})
 
         logs = work / "logs"
         logs.mkdir()
-        if not args.skip_unit:
+        upstream_names = [name for name in names if first_party_extension(name) is None]
+        if not args.skip_unit and upstream_names:
             receipt["gates"].append(
                 run_gate(
                     "install",
@@ -196,7 +208,7 @@ def qualify(args) -> dict:
             receipt["gates"].append(
                 run_gate(
                     "unit",
-                    ["bun", "test", *[f"{n}/" for n in names]],
+                    ["bun", "test", *[f"{name}/" for name in upstream_names]],
                     repo,
                     900,
                     logs,
@@ -205,7 +217,8 @@ def qualify(args) -> dict:
         stage = work / "stage"
         stage.mkdir()
         for name in names:
-            shutil.copytree(repo / name, stage / name, symlinks=True)
+            source = first_party_extension(name) or (repo / name)
+            shutil.copytree(source, stage / name, symlinks=True)
         pi = Path(args.pi) if args.pi else active_pi()
         version = args.pi_version or pinned_pi_version()
         if not pi.is_file():

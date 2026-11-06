@@ -105,6 +105,178 @@ async fn run_git_with_env(
     }
 }
 
+/// Push only the committed current feature branch to a remote that resolves to
+/// the workspace's configured GitLab project. Errors deliberately omit Git's
+/// stderr because it can contain a credential-bearing remote URL.
+pub(crate) async fn push_current_branch(
+    state: &AppState,
+    user_id: &str,
+    workspace_path: &str,
+    remote_name: &str,
+    gitlab_host: &str,
+    gitlab_path_prefix: &str,
+    project_path: &str,
+    default_branch: &str,
+) -> Result<String, String> {
+    if !valid_remote_name(remote_name) {
+        return Err("Choose a valid Git remote for this GitLab project".into());
+    }
+    let workspace = validate_workspace_path(state, user_id, workspace_path)
+        .await
+        .map_err(|_| "GitLab workspace is unavailable".to_owned())?;
+    let remote_url = run_git(
+        state,
+        user_id,
+        &workspace,
+        vec!["remote".into(), "get-url".into(), "--fetch".into(), remote_name.into()],
+    )
+    .await
+    .map_err(|_| "The selected Git remote is unavailable".to_owned())?;
+    let actual_project = crate::gitlab::project_from_remote(
+        remote_url.stdout.trim(),
+        gitlab_host,
+        gitlab_path_prefix,
+    )
+    .map_err(|_| "The selected Git remote does not match the mapped GitLab project".to_owned())?;
+    if actual_project != project_path {
+        return Err("The selected Git remote does not match the mapped GitLab project".into());
+    }
+
+    let branch = run_git(
+        state,
+        user_id,
+        &workspace,
+        vec!["branch".into(), "--show-current".into()],
+    )
+    .await
+    .map_err(|_| "Unable to read the current Git branch".to_owned())?
+    .stdout
+    .trim()
+    .to_owned();
+    if branch.is_empty() || branch == default_branch || branch.starts_with('-') {
+        return Err("Draft MRs require a non-default feature branch".into());
+    }
+    run_git(
+        state,
+        user_id,
+        &workspace,
+        vec!["rev-parse".into(), "--verify".into(), "HEAD".into()],
+    )
+    .await
+    .map_err(|_| "Commit at least one change on the feature branch before requesting a draft MR".to_owned())?;
+    let status = run_git(
+        state,
+        user_id,
+        &workspace,
+        vec![
+            "status".into(),
+            "--porcelain=v1".into(),
+            "-z".into(),
+            "--untracked-files=normal".into(),
+        ],
+    )
+    .await
+    .map_err(|_| "Unable to check the Git worktree".to_owned())?;
+    if !status.stdout.is_empty() {
+        return Err("Commit the intended changes before requesting a draft MR".into());
+    }
+
+    run_git_with_env(
+        state,
+        user_id,
+        &workspace,
+        vec![
+            "push".into(),
+            "--set-upstream".into(),
+            remote_name.into(),
+            branch.clone(),
+        ],
+        non_interactive_env(),
+    )
+    .await
+    .map_err(|_| {
+        "Git push failed. Check the workspace's normal Git credentials and remote permissions; Oqto did not use the GitLab API token for Git transport.".to_owned()
+    })?;
+    Ok(branch)
+}
+
+/// Bounded, credential-free Git context for the selected GitLab project.
+pub(crate) async fn inspect_gitlab_workspace(
+    state: &AppState,
+    user_id: &str,
+    workspace_path: &str,
+    gitlab_host: &str,
+    gitlab_path_prefix: &str,
+    project_path: &str,
+) -> Result<serde_json::Value, String> {
+    let workspace = validate_workspace_path(state, user_id, workspace_path)
+        .await
+        .map_err(|_| "GitLab workspace is unavailable".to_owned())?;
+    let branch = run_git(
+        state,
+        user_id,
+        &workspace,
+        vec!["branch".into(), "--show-current".into()],
+    )
+    .await
+    .map_err(|_| "Unable to read the current Git branch".to_owned())?
+    .stdout
+    .trim()
+    .to_owned();
+    let status = run_git(
+        state,
+        user_id,
+        &workspace,
+        vec![
+            "status".into(),
+            "--porcelain=v1".into(),
+            "-z".into(),
+            "--untracked-files=normal".into(),
+        ],
+    )
+    .await
+    .map_err(|_| "Unable to inspect the Git worktree".to_owned())?;
+    let remotes = run_git(state, user_id, &workspace, vec!["remote".into()])
+        .await
+        .map_err(|_| "Unable to list Git remotes".to_owned())?;
+    let mut matching_remotes = Vec::new();
+    for name in remotes.stdout.lines().map(str::trim).filter(|name| valid_remote_name(name)) {
+        let url = run_git(
+            state,
+            user_id,
+            &workspace,
+            vec!["remote".into(), "get-url".into(), "--fetch".into(), name.into()],
+        )
+        .await
+        .map_err(|_| "Unable to inspect a Git remote".to_owned())?;
+        if crate::gitlab::project_from_remote(
+            url.stdout.trim(),
+            gitlab_host,
+            gitlab_path_prefix,
+        )
+        .is_ok_and(|remote_project| remote_project == project_path)
+        {
+            matching_remotes.push(name.to_owned());
+        }
+    }
+    matching_remotes.sort();
+    Ok(serde_json::json!({
+        "current_branch": branch,
+        "worktree_clean": status.stdout.is_empty(),
+        "matching_remote_names": matching_remotes,
+    }))
+}
+
+fn valid_remote_name(name: &str) -> bool {
+    !name.is_empty()
+        && name.len() <= 128
+        && !name.starts_with('-')
+        && name.bytes().all(|byte| {
+            byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-' | b'/')
+        })
+        && !name.split('/').any(|part| matches!(part, "." | ".."))
+}
+
 /// `## main...origin/main [ahead 2, behind 1]` -> branch, upstream, distance.
 fn parse_branch_header(line: &str) -> (String, Option<String>, usize, usize) {
     let rest = line.trim_start_matches("## ");
@@ -209,6 +381,62 @@ fn parse_log(stdout: &str) -> Vec<GitCommitSummary> {
         .collect()
 }
 
+fn parse_remotes(stdout: &str) -> Vec<super::GitRemoteEntry> {
+    let mut remotes = Vec::new();
+    let mut names = std::collections::HashSet::new();
+    for line in stdout.lines() {
+        let Some((name, value)) = line.split_once('\t') else {
+            continue;
+        };
+        let Some(url) = value.strip_suffix(" (fetch)") else {
+            continue;
+        };
+        let Some(url) = sanitize_remote_url(url) else {
+            continue;
+        };
+        if names.insert(name.to_owned()) {
+            remotes.push(super::GitRemoteEntry {
+                name: name.to_owned(),
+                url,
+            });
+        }
+    }
+    remotes
+}
+
+fn sanitize_remote_url(raw: &str) -> Option<String> {
+    if let Some(rest) = raw.strip_prefix("git@") {
+        let (host, path) = rest.split_once(':')?;
+        if !valid_remote_host(host) || path.is_empty() || path.contains(['?', '#', '\\']) {
+            return None;
+        }
+        return Some(format!("git@{host}:{path}"));
+    }
+    let mut url = reqwest::Url::parse(raw).ok()?;
+    if !matches!(url.scheme(), "https" | "ssh")
+        || url.host_str().is_none_or(|host| !valid_remote_host(host))
+        || url.query().is_some()
+        || url.fragment().is_some()
+    {
+        return None;
+    }
+    url.set_username("").ok()?;
+    url.set_password(None).ok()?;
+    if !url.username().is_empty() || url.password().is_some() {
+        return None;
+    }
+    Some(url.to_string())
+}
+
+fn valid_remote_host(host: &str) -> bool {
+    !host.is_empty()
+        && host.len() <= 253
+        && host.parse::<std::net::IpAddr>().is_err()
+        && host
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'-' | b':'))
+}
+
 fn error(id: Option<String>, message: impl Into<String>) -> Option<WsEvent> {
     Some(WsEvent::Git(GitWsEvent::Error {
         id,
@@ -240,6 +468,7 @@ pub(super) async fn handle_git_command(
             id, workspace_path, ..
         }
         | GitWsCommand::Branches { id, workspace_path }
+        | GitWsCommand::Remotes { id, workspace_path }
         | GitWsCommand::Switch {
             id, workspace_path, ..
         }
@@ -261,6 +490,7 @@ pub(super) async fn handle_git_command(
             | GitWsCommand::Diff { .. }
             | GitWsCommand::Log { .. }
             | GitWsCommand::Branches { .. }
+            | GitWsCommand::Remotes { .. }
     );
     if requires_write
         && let Err(err) =
@@ -423,6 +653,22 @@ pub(super) async fn handle_git_command(
                     id,
                     branches: parse_branches(&output.stdout, &current),
                     current,
+                })),
+                Err(err) => error(id, err),
+            }
+        }
+        GitWsCommand::Remotes { id, .. } => {
+            match run_git(
+                state,
+                user_id,
+                &workspace,
+                vec!["remote".to_string(), "-v".to_string()],
+            )
+            .await
+            {
+                Ok(output) => Some(WsEvent::Git(GitWsEvent::RemotesResult {
+                    id,
+                    remotes: parse_remotes(&output.stdout),
                 })),
                 Err(err) => error(id, err),
             }
@@ -591,6 +837,19 @@ mod tests {
         assert_eq!(branch, "solo");
         assert_eq!(upstream, None);
         assert_eq!((ahead, behind), (0, 0));
+    }
+
+    #[test]
+    fn remote_listing_never_returns_embedded_credentials_or_push_only_urls() {
+        let remotes = parse_remotes(
+            "origin\thttps://alice:secret@gitlab.example/team/repo.git (fetch)\n\
+             origin\thttps://alice:secret@gitlab.example/team/repo.git (push)\n\
+             local\tfile:///tmp/repo (fetch)\n",
+        );
+        assert_eq!(remotes.len(), 1);
+        assert_eq!(remotes[0].name, "origin");
+        assert_eq!(remotes[0].url, "https://gitlab.example/team/repo.git");
+        assert!(!remotes[0].url.contains("secret"));
     }
 
     #[test]

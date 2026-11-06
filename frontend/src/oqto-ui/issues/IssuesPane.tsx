@@ -7,8 +7,10 @@
 import { CircleCheck, CirclePlay, Eye, RefreshCw } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { useTranslation } from "react-i18next";
-import type { Issue, IssueStatus } from "../platform/issues-contract";
-import type { IssueHost } from "../platform/issues-contract";
+import type { Issue, IssueHost, IssueStatus } from "../platform/issues-contract";
+import type { GitHost } from "../platform/git-contract";
+import type { GitLabHost, GitLabInboxEvent } from "../platform/gitlab-contract";
+import { GitLabInboxPane } from "./GitLabInboxPane";
 import { useIssues } from "./useIssues";
 
 const GROUPS: readonly IssueStatus[] = [
@@ -32,6 +34,15 @@ interface IssuesPaneProps {
 	readonly workspacePath: string;
 	/** The Container's own controls, placed in this pane's bar. */
 	readonly chrome?: ReactNode;
+	readonly gitlabHost?: GitLabHost;
+	readonly gitHost?: GitHost;
+	readonly sessionId?: string;
+	readonly onPlanGitLabIssue?: (event: GitLabInboxEvent) => void;
+	readonly onStartGitLabImplementation?: (
+		event: GitLabInboxEvent,
+		sessionId: string | null,
+	) => void;
+	readonly onAddressGitLabComment?: (event: GitLabInboxEvent) => void;
 }
 
 function byPriority(left: Issue, right: Issue): number {
@@ -42,10 +53,17 @@ export function IssuesPane({
 	issueHost,
 	workspacePath,
 	chrome,
+	gitlabHost,
+	gitHost,
+	sessionId = "",
+	onPlanGitLabIssue,
+	onStartGitLabImplementation,
+	onAddressGitLabComment,
 }: IssuesPaneProps) {
 	const { t } = useTranslation();
 	const board = useIssues(issueHost, workspacePath);
 	const [showClosed, setShowClosed] = useState(false);
+	const [source, setSource] = useState<"trx" | "gitlab">("trx");
 	const groups = GROUPS.filter((status) => status !== "closed" || showClosed)
 		.map((status) => ({
 			status,
@@ -57,6 +75,10 @@ export function IssuesPane({
 	return (
 		<section className="wb-issues" aria-label={t("oqtoUi.issues.label")}>
 			<header className="wb-issues__bar">
+				<button type="button" aria-pressed={source === "trx"} onClick={() => setSource("trx")}>TRX</button>
+				{gitlabHost && <button type="button" aria-pressed={source === "gitlab"} onClick={() => setSource("gitlab")}>GitLab</button>}
+				{chrome}
+				{source === "gitlab" && gitlabHost ? null : <>
 				<span>{t("oqtoUi.issues.count", { count: board.issues.length })}</span>
 				<button
 					type="button"
@@ -77,7 +99,21 @@ export function IssuesPane({
 				>
 					<RefreshCw aria-hidden="true" />
 				</button>
+				</>}
 			</header>
+			{source === "gitlab" && gitlabHost ? (
+				<GitLabInboxPane
+					host={gitlabHost}
+					gitHost={gitHost}
+					workspacePath={workspacePath}
+					sessionId={sessionId}
+					onPlan={(event) => onPlanGitLabIssue?.(event)}
+					onStartImplementation={(event, approvedSessionId) =>
+						onStartGitLabImplementation?.(event, approvedSessionId)
+					}
+					onAddressComment={(event) => onAddressGitLabComment?.(event)}
+				/>
+			) : (
 			<div className="wb-issues__body">
 				{board.failed ? (
 					<p className="wb-issues__note">{t("oqtoUi.issues.failed")}</p>
@@ -141,6 +177,7 @@ export function IssuesPane({
 					))
 				)}
 			</div>
+			)}
 		</section>
 	);
 }

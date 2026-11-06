@@ -22,6 +22,7 @@ mod connections;
 mod credentials;
 pub use connections::routes as connection_routes;
 mod feedback;
+pub(crate) mod gitlab;
 mod invites;
 mod misc;
 mod oauth;
@@ -36,6 +37,8 @@ pub mod wake;
 // Re-export all public types and handlers
 
 pub use credentials::credential_routes;
+pub use gitlab::routes as gitlab_routes;
+pub use gitlab::start_background_polling as start_gitlab_background_polling;
 
 // API key handlers
 pub use api_keys::{create_api_key, delete_api_key, list_api_keys, revoke_api_key};

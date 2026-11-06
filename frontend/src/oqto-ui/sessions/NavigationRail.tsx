@@ -14,7 +14,7 @@ import {
 	Shield,
 	Sun,
 } from "lucide-react";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import type {
@@ -52,6 +52,10 @@ export function NavigationRail({
 	const creating = useRef(false);
 	const [pending, setPending] = useState(false);
 	const [creationFailed, setCreationFailed] = useState(false);
+	const [gitlabCounts, setGitlabCounts] = useState<{
+		total: number;
+		byWorkspacePath: Readonly<Record<string, number>>;
+	}>({ total: 0, byWorkspacePath: {} });
 	const createSession = async () => {
 		if (!platform.createSession || creating.current) return;
 		creating.current = true;
@@ -76,6 +80,30 @@ export function NavigationRail({
 	const [disclosedIds, setDisclosedIds] = useState<ReadonlySet<string>>(
 		() => new Set([workDirectoryId]),
 	);
+	useEffect(() => {
+		const gitlab = platform.gitlab;
+		if (!gitlab) return;
+		let active = true;
+		const load = () => {
+			void gitlab.unreadCounts().then((counts) => {
+				if (active) setGitlabCounts(counts);
+			}).catch(() => undefined);
+		};
+		load();
+		const stopWatching = gitlab.watchInboxUpdates?.((counts) => {
+			if (!active) return;
+			setGitlabCounts((current) => ({
+				total: counts.total,
+				byWorkspacePath: { ...current.byWorkspacePath, ...counts.byWorkspacePath },
+			}));
+		});
+		const timer = window.setInterval(load, 60_000);
+		return () => {
+			active = false;
+			window.clearInterval(timer);
+			stopWatching?.();
+		};
+	}, [platform.gitlab]);
 	const toggleDisclosure = (id: string) => {
 		setDisclosedIds((current) => {
 			const next = new Set(current);
@@ -137,6 +165,11 @@ export function NavigationRail({
 					{t("oqtoUi.navigation.sessions")}
 				</span>
 				<span className="wb-sessions-header__count">({sessionCount})</span>
+				{gitlabCounts.total > 0 && (
+					<span className="wb-gitlab-unread" aria-label={`${gitlabCounts.total} unread GitLab events`}>
+						{gitlabCounts.total}
+					</span>
+				)}
 				<span className="wb-sessions-header__actions">
 					<button
 						className="wb-icon-button"
@@ -216,6 +249,14 @@ export function NavigationRail({
 									<span className="wb-project__count">
 										({directory.sessions.length})
 									</span>
+									{(gitlabCounts.byWorkspacePath[directory.path] ?? 0) > 0 && (
+										<span
+											className="wb-gitlab-unread wb-gitlab-unread--workspace"
+											aria-label={`${gitlabCounts.byWorkspacePath[directory.path]} unread GitLab events`}
+										>
+											{gitlabCounts.byWorkspacePath[directory.path]}
+										</span>
+									)}
 								</button>
 							</div>
 							{disclosed ? (

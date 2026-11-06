@@ -283,6 +283,13 @@ pub enum WsEvent {
         detail: Option<Value>,
     },
 
+    /// GitLab inbox changed; payload is counts and a workspace path only.
+    GitLabInboxUpdated {
+        workspace_path: String,
+        total_unread: i64,
+        workspace_unread: i64,
+    },
+
     // ========== Legacy Events ==========
     /// Legacy SSE event (deprecated).
     /// Contains the original event type and data.

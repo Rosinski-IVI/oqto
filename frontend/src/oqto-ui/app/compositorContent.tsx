@@ -209,7 +209,56 @@ export function createContentRenderer(
 			return (
 				<IssuesPane
 					issueHost={platform.issues}
+					gitHost={platform.git}
+					gitlabHost={platform.gitlab}
 					workspacePath={context.directory.path}
+					sessionId={context.session.id}
+					onPlanGitLabIssue={(issue) => {
+						void (async () => {
+							await platform.gitlab?.selectIssue(
+								issue.workspacePath || context.directory.path,
+								context.session.id,
+								issue.entityIid,
+							);
+							await platform.chat.send(
+								context.session.id,
+								`Help me plan GitLab issue #${issue.entityIid}: ${issue.title}. Discuss an approach before making changes. ${issue.summary}`,
+								"prompt",
+							);
+						})().catch((error: unknown) => console.error("GitLab issue selection failed", error));
+					}}
+					onStartGitLabImplementation={(issue, approvedSessionId) => {
+						const targetSession = approvedSessionId ?? context.session.id;
+						void (async () => {
+							await platform.gitlab?.selectIssue(
+								issue.workspacePath || context.directory.path,
+								targetSession,
+								issue.entityIid,
+							);
+							await platform.chat.send(
+								targetSession,
+								`Implementation was approved for GitLab issue #${issue.entityIid}: ${issue.title}. Start implementation in this workspace. ${issue.summary}`,
+								"prompt",
+							);
+						})().catch((error: unknown) => console.error("GitLab implementation start failed", error));
+					}}
+					onAddressGitLabComment={(event) => {
+						const targetSession = context.session.id;
+						void (async () => {
+							if (event.relatedIssueIid !== null) {
+								await platform.gitlab?.selectIssue(
+									event.workspacePath || context.directory.path,
+									targetSession,
+									event.relatedIssueIid,
+								);
+							}
+							await platform.chat.send(
+								targetSession,
+								`Address GitLab merge request discussion ${event.discussionId ?? ""} for issue #${event.relatedIssueIid ?? "unknown"}: ${event.summary}. Read the selected ticket and its linked merge request, then propose a thread reply or implementation changes.`,
+								"prompt",
+							);
+						})().catch((error: unknown) => console.error("GitLab discussion routing failed", error));
+					}}
 					chrome={presentation.chrome}
 				/>
 			);

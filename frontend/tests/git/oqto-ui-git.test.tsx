@@ -97,6 +97,27 @@ function fakeSocket() {
 }
 
 describe("git adapter", () => {
+	it("lists only host-sanitized fetch remotes", async () => {
+		const { socket, sent } = fakeSocket();
+		const git = createMuxGitHost(() => socket);
+		const pending = git.remotes?.("/work/repo");
+		socket.open();
+		expect(sent[0]).toMatchObject({
+			channel: "git",
+			type: "remotes",
+			workspace_path: "/work/repo",
+		});
+		socket.deliver({
+			channel: "git",
+			type: "remotes_result",
+			id: "git-1",
+			remotes: [{ name: "origin", url: "https://gitlab.example/team/repo.git" }],
+		});
+		expect(await pending).toEqual([
+			{ name: "origin", url: "https://gitlab.example/team/repo.git" },
+		]);
+	});
+
 	it("maps the channel's status record, keeping both status codes", async () => {
 		const { socket, sent } = fakeSocket();
 		const git = createMuxGitHost(() => socket);

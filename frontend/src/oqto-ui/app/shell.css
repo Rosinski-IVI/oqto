@@ -3483,6 +3483,142 @@
 	text-decoration: line-through;
 }
 
+.wb-gitlab {
+	flex: 1 1 auto;
+	min-block-size: 0;
+	overflow-y: auto;
+	padding: 8px;
+	font-size: 11px;
+}
+
+.wb-gitlab__bar,
+.wb-gitlab__actions,
+.wb-gitlab__proposal {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 8px;
+}
+
+.wb-gitlab__bar {
+	justify-content: space-between;
+	padding-block: 4px 8px;
+}
+
+.wb-gitlab__events,
+.wb-gitlab__proposals {
+	display: grid;
+	gap: 8px;
+	margin-block: 8px;
+}
+
+.wb-gitlab__event,
+.wb-gitlab__proposal {
+	padding: 8px;
+	border: 1px solid var(--border);
+	background: var(--card);
+}
+
+.wb-gitlab__event-head {
+	display: flex;
+	justify-content: space-between;
+	gap: 8px;
+}
+
+.wb-gitlab__event p,
+.wb-gitlab p {
+	margin-block: 6px;
+	color: var(--muted-foreground);
+	white-space: pre-wrap;
+}
+
+.wb-gitlab__actions {
+	margin-block-start: 8px;
+}
+
+.wb-gitlab button,
+.wb-issues__bar > button {
+	border: 1px solid var(--border);
+	border-radius: 4px;
+	padding: 4px 7px;
+	background: var(--background);
+	color: var(--foreground);
+	font: inherit;
+}
+
+.wb-gitlab button:disabled {
+	opacity: 0.55;
+}
+
+.wb-gitlab__form {
+	display: grid;
+	gap: 8px;
+	margin-block: 10px;
+	padding: 8px;
+	border: 1px solid var(--border);
+}
+
+.wb-gitlab__form label {
+	display: grid;
+	gap: 4px;
+}
+
+.wb-gitlab__form input:not([type="checkbox"]),
+.wb-gitlab__form select,
+.wb-gitlab__form textarea {
+	min-inline-size: 0;
+	border: 1px solid var(--border);
+	border-radius: 4px;
+	padding: 5px;
+	background: var(--background);
+	color: var(--foreground);
+	font: inherit;
+}
+
+.wb-gitlab__form textarea {
+	min-block-size: 64px;
+	resize: vertical;
+}
+
+.wb-gitlab__form fieldset {
+	display: grid;
+	gap: 4px;
+	border: 1px solid var(--border);
+}
+
+.wb-gitlab__form fieldset label {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+}
+
+.wb-gitlab__settings summary {
+	cursor: pointer;
+	color: var(--muted-foreground);
+}
+
+.wb-gitlab__error {
+	color: var(--destructive, #b91c1c) !important;
+}
+
+.wb-gitlab-unread {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	min-inline-size: 18px;
+	block-size: 18px;
+	border-radius: 999px;
+	padding-inline: 5px;
+	background: var(--primary);
+	color: var(--primary-foreground, var(--background));
+	font-size: 10px;
+	font-weight: 700;
+}
+
+.wb-gitlab-unread--workspace {
+	margin-inline-start: auto;
+}
+
 /* --------------------------------------------------------------- terminal */
 
 .wb-terminal {

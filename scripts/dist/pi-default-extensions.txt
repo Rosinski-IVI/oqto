@@ -9,3 +9,4 @@ pi-custom-context-files
 pi-read-image-guard
 pi-read-file-guard
 pi-history-search
+pi-oqto-gitlab-workflow

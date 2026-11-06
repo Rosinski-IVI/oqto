@@ -5,6 +5,7 @@ import type { SelectionHost } from "./selection-service";
 import type { ActionHost } from "./actions-contract";
 import type { FileHost } from "./files-contract";
 import type { GitHost } from "./git-contract";
+import type { GitLabHost } from "./gitlab-contract";
 import type { IssueHost } from "./issues-contract";
 import type { TerminalHost } from "./terminal-contract";
 
@@ -257,6 +258,8 @@ export type OqtoUiPlatform = {
 	files: FileHost;
 	issues: IssueHost;
 	git: GitHost;
+	/** Optional private GitLab workflow host; PATs are never returned here. */
+	gitlab?: GitLabHost;
 	actions: ActionHost;
 	terminal: TerminalHost;
 	/** Writable chat engine; scripted adapters provide a deterministic fake. */

@@ -141,7 +141,13 @@ def main():
             agent = home / ".pi/agent"
             agent.mkdir(parents=True)
             cwd.mkdir()
-            MANAGED.reconcile(home, args.source, names, policy)
+            managed_source = root / "managed-source"
+            shutil.copytree(args.source, managed_source)
+            for name in names:
+                overlay = HERE / "pi-first-party-extensions" / name
+                if (overlay / "index.ts").is_file():
+                    shutil.copytree(overlay, managed_source / name, dirs_exist_ok=True)
+            MANAGED.reconcile(home, managed_source, names, policy)
             extensions = agent / "extensions"
             shutil.copytree(args.legacy_source, extensions / "pi-oqto-todos")
             # A genuine unknown personal extension, a trusted project extension,

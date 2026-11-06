@@ -2020,6 +2020,18 @@ impl RunnerClient {
         }
     }
 
+    /// Trusted GitLab service request. The runner resolves the credential and
+    /// performs only a closed-vocabulary REST operation over HTTPS.
+    pub async fn gitlab_http(
+        &self,
+        request: oqto_protocol::gitlab::GitLabHttpDispatch,
+    ) -> Result<serde_json::Value> {
+        match self.request(&RunnerRequest::GitLabHttp(request)).await? {
+            RunnerResponse::GitLabHttpResult { json } => Ok(json),
+            _ => anyhow::bail!("GitLab request unavailable"),
+        }
+    }
+
     /// Append metadata through the owning runner's canonical oqto-log authority.
     pub async fn record_host_action(
         &self,

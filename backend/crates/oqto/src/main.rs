@@ -3039,6 +3039,12 @@ async fn handle_serve(ctx: &RuntimeContext, cmd: ServeCommand) -> Result<()> {
     // This is the single source of truth for routing. All clients (frontend,
     // internal services, containers) must use /api/* paths.
     let admin_state = state.clone();
+    let gitlab_shutdown = tokio_util::sync::CancellationToken::new();
+    let gitlab_poller = api::handlers::start_gitlab_background_polling(
+        state.clone(),
+        gitlab_shutdown.clone(),
+    )
+    .context("starting GitLab poll service")?;
     let api_router = api::create_router_with_config(state, ctx.config.server.max_upload_size_mb);
     let app = with_frontend_static_if_available(api_router);
 
@@ -3093,6 +3099,7 @@ async fn handle_serve(ctx: &RuntimeContext, cmd: ServeCommand) -> Result<()> {
     };
 
     let stop_sessions_on_shutdown = !local_mode || ctx.config.local.stop_sessions_on_shutdown;
+    let gitlab_shutdown_signal = gitlab_shutdown.clone();
 
     // Set up graceful shutdown
     let shutdown_signal = async move {
@@ -3121,6 +3128,7 @@ async fn handle_serve(ctx: &RuntimeContext, cmd: ServeCommand) -> Result<()> {
             _ = ctrl_c => {},
             _ = terminate => {},
         }
+        gitlab_shutdown_signal.cancel();
 
         // Workspace placements deliberately outlive the backend: startup
         // reconciles them from their specs, and tearing them down here would
@@ -3150,13 +3158,21 @@ async fn handle_serve(ctx: &RuntimeContext, cmd: ServeCommand) -> Result<()> {
         info!("Shutdown complete");
     };
 
-    axum::serve(
+    let server_result = axum::serve(
         listener,
         app.into_make_service_with_connect_info::<std::net::SocketAddr>(),
     )
     .with_graceful_shutdown(shutdown_signal)
-    .await
-    .context("running server")?;
+    .await;
+    gitlab_shutdown.cancel();
+
+    let poller_result = if let Some(poller) = gitlab_poller {
+        poller.await.context("joining GitLab poll service")
+    } else {
+        Ok(())
+    };
+    server_result.context("running server")?;
+    poller_result?;
 
     Ok(())
 }

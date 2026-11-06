@@ -53,6 +53,12 @@ export interface RemoteOutcome {
 	readonly summary: string;
 }
 
+/** Sanitized remote URL: credentials, query and fragment are removed by host. */
+export interface GitRemote {
+	readonly name: string;
+	readonly url: string;
+}
+
 export interface GitHost {
 	status(workspacePath: string): Promise<GitStatus>;
 	diff(workspacePath: string, path: string, staged: boolean): Promise<GitDiff>;
@@ -79,4 +85,6 @@ export interface GitHost {
 		workspacePath: string,
 		operation: RemoteOutcome["operation"],
 	): Promise<RemoteOutcome>;
+	/** Fetch-side URLs only, with any embedded credentials removed. */
+	remotes?(workspacePath: string): Promise<readonly GitRemote[]>;
 }

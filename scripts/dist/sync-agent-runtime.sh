@@ -161,6 +161,9 @@ sync_extensions() {
   # Fail-closed: required extensions must exist at this ref.
   local ext missing=0
   for ext in "${PI_DEFAULT_EXTENSIONS[@]}"; do
+    if [[ -f "$SCRIPT_DIR/pi-first-party-extensions/$ext/index.ts" ]]; then
+      continue
+    fi
     [[ -f "$src/$ext/index.ts" ]] || { err "required extension missing at ref: $ext"; missing=1; }
   done
   [[ "$missing" -eq 0 ]] || return 1
@@ -168,6 +171,13 @@ sync_extensions() {
   log "syncing extensions to /usr/share/oqto/pi-agent-extensions (new-user source)"
   "${SUDO[@]}" mkdir -p /usr/share/oqto/pi-agent-extensions || return 1
   "${SUDO[@]}" rsync -a --delete --exclude='.git' "$src/" /usr/share/oqto/pi-agent-extensions/ || return 1
+
+  for ext in "${PI_DEFAULT_EXTENSIONS[@]}"; do
+    local overlay="$SCRIPT_DIR/pi-first-party-extensions/$ext"
+    [[ -f "$overlay/index.ts" ]] || continue
+    "${SUDO[@]}" mkdir -p "/usr/share/oqto/pi-agent-extensions/$ext" || return 1
+    "${SUDO[@]}" rsync -a --delete "$overlay/" "/usr/share/oqto/pi-agent-extensions/$ext/" || return 1
+  done
 
   # Every existing platform user + the invoking user + /etc/skel (new users).
   local home count=0

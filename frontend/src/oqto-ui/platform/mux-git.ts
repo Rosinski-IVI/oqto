@@ -11,6 +11,7 @@ import type {
 	GitDiff,
 	GitEntry,
 	GitHost,
+	GitRemote,
 	GitStatus,
 	RemoteOutcome,
 } from "./git-contract";
@@ -51,6 +52,7 @@ interface GitEvent {
 		author?: string;
 		timestamp?: number;
 	}[];
+	readonly remotes?: readonly { name?: string; url?: string }[];
 }
 
 /** A git-channel command; the channel tag and id are added when framing. */
@@ -70,6 +72,7 @@ type PendingValue =
 	| GitDiff
 	| readonly GitCommit[]
 	| readonly GitBranch[]
+	| readonly GitRemote[]
 	| RemoteOutcome
 	| string
 	| undefined;
@@ -173,6 +176,15 @@ export function createMuxGitHost(openSocket: () => MuxSocket): GitHost {
 							name: raw.name ?? "",
 							current: raw.current === true,
 							worktree: raw.worktree ?? null,
+						}),
+					),
+				);
+			} else if (message.type === "remotes_result") {
+				waiting.resolve(
+					(message.remotes ?? []).map(
+						(raw): GitRemote => ({
+							name: raw.name ?? "",
+							url: raw.url ?? "",
 						}),
 					),
 				);
@@ -282,6 +294,12 @@ export function createMuxGitHost(openSocket: () => MuxSocket): GitHost {
 		remote(workspacePath, operation) {
 			return request<RemoteOutcome>("remote_result", {
 				type: operation,
+				workspace_path: workspacePath,
+			});
+		},
+		remotes(workspacePath) {
+			return request<readonly GitRemote[]>("remotes_result", {
+				type: "remotes",
 				workspace_path: workspacePath,
 			});
 		},
