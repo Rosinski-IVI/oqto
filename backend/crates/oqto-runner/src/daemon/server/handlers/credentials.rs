@@ -116,7 +116,7 @@ async fn execute_gitlab(
     .await?;
     let secret = runner
         .credentials
-        .resolve_dispatch(request.account_id.clone(), request.credential)
+        .resolve_dispatch(request.account_id.clone(), request.credential.clone())
         .await?;
     let lease = oqto_credential_http::gitlab_authorized_use(
         &request.host,
@@ -130,7 +130,7 @@ async fn execute_gitlab(
     )?;
     let authority = AuditedSnapshot {
         event,
-        account: request.account_id,
+        account: request.account_id.clone(),
         secret,
     };
     Ok(oqto_credential_http::gitlab_json(&authority, lease, request)

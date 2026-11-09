@@ -3088,7 +3088,7 @@ mod tests {
             },
             ..event
         };
-        assert!(matches!(gitlab_rpc_input(&forged), Some((_, None, Some(_))));
+        assert!(matches!(gitlab_rpc_input(&forged), Some((_, None, Some(_)))));
     }
 
     #[test]
