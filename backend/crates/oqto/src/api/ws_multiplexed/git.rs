@@ -128,7 +128,12 @@ pub(crate) async fn push_current_branch(
         state,
         user_id,
         &workspace,
-        vec!["remote".into(), "get-url".into(), "--fetch".into(), remote_name.into()],
+        vec![
+            "remote".into(),
+            "get-url".into(),
+            "--fetch".into(),
+            remote_name.into(),
+        ],
     )
     .await
     .map_err(|_| "The selected Git remote is unavailable".to_owned())?;
@@ -163,7 +168,9 @@ pub(crate) async fn push_current_branch(
         vec!["rev-parse".into(), "--verify".into(), "HEAD".into()],
     )
     .await
-    .map_err(|_| "Commit at least one change on the feature branch before requesting a draft MR".to_owned())?;
+    .map_err(|_| {
+        "Commit at least one change on the feature branch before requesting a draft MR".to_owned()
+    })?;
     let status = run_git(
         state,
         user_id,
@@ -240,21 +247,27 @@ pub(crate) async fn inspect_gitlab_workspace(
         .await
         .map_err(|_| "Unable to list Git remotes".to_owned())?;
     let mut matching_remotes = Vec::new();
-    for name in remotes.stdout.lines().map(str::trim).filter(|name| valid_remote_name(name)) {
+    for name in remotes
+        .stdout
+        .lines()
+        .map(str::trim)
+        .filter(|name| valid_remote_name(name))
+    {
         let url = run_git(
             state,
             user_id,
             &workspace,
-            vec!["remote".into(), "get-url".into(), "--fetch".into(), name.into()],
+            vec![
+                "remote".into(),
+                "get-url".into(),
+                "--fetch".into(),
+                name.into(),
+            ],
         )
         .await
         .map_err(|_| "Unable to inspect a Git remote".to_owned())?;
-        if crate::gitlab::project_from_remote(
-            url.stdout.trim(),
-            gitlab_host,
-            gitlab_path_prefix,
-        )
-        .is_ok_and(|remote_project| remote_project == project_path)
+        if crate::gitlab::project_from_remote(url.stdout.trim(), gitlab_host, gitlab_path_prefix)
+            .is_ok_and(|remote_project| remote_project == project_path)
         {
             matching_remotes.push(name.to_owned());
         }
@@ -271,9 +284,9 @@ fn valid_remote_name(name: &str) -> bool {
     !name.is_empty()
         && name.len() <= 128
         && !name.starts_with('-')
-        && name.bytes().all(|byte| {
-            byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-' | b'/')
-        })
+        && name
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-' | b'/'))
         && !name.split('/').any(|part| matches!(part, "." | ".."))
 }
 

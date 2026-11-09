@@ -800,9 +800,7 @@ impl Runner {
             }
             RunnerRequest::CredentialHttp(_)
             | RunnerRequest::GitLabHttp(_)
-            | RunnerRequest::DescribeCredential { .. } => {
-                std::time::Duration::from_secs(120)
-            }
+            | RunnerRequest::DescribeCredential { .. } => std::time::Duration::from_secs(120),
             RunnerRequest::RunAppOperation(_) => std::time::Duration::from_secs(305),
             _ => std::time::Duration::from_secs(10),
         }

@@ -13,10 +13,21 @@ use std::path::Path;
 enum Subtree {
     /// The namespace root is the live host root (no root-level remount).
     Live,
-    /// A bind brought the host subtree into the namespace.
-    HostBound,
+    /// A read-only bind brought the host subtree into the namespace.
+    HostBoundReadOnly,
+    /// A writable bind brought the host subtree into the namespace.
+    HostBoundWritable,
     /// A tmpfs replaced the subtree; host contents are absent.
     Masked,
+}
+
+fn nearest_subtree(path: &Path, mounts: &[(std::path::PathBuf, Subtree)]) -> Subtree {
+    mounts
+        .iter()
+        .filter(|(root, _)| path.starts_with(root))
+        .max_by_key(|(root, _)| root.components().count())
+        .map(|(_, subtree)| *subtree)
+        .unwrap_or(Subtree::Live)
 }
 
 /// Whether a bind source exists on this host.
@@ -78,6 +89,16 @@ pub fn compile_filesystem_args(
                 mount_stack.push((path.to_path_buf(), Subtree::Masked));
             }
             Access::None => {
+                // A missing child under a read-only bind is already denied:
+                // it is absent and the sandbox cannot create it. Trying to
+                // mount tmpfs there makes bwrap mkdir the mountpoint beneath
+                // a read-only parent (for example /etc/oqto beneath /etc),
+                // which aborts the entire sandbox.
+                if !presence.exists(path)
+                    && nearest_subtree(path, &mount_stack) == Subtree::HostBoundReadOnly
+                {
+                    continue;
+                }
                 args.push("--tmpfs".to_string());
                 args.push(path_str.clone());
                 mount_stack.push((path.to_path_buf(), Subtree::Masked));
@@ -90,13 +111,13 @@ pub fn compile_filesystem_args(
                 args.push("--ro-bind".to_string());
                 args.push(path_str.clone());
                 args.push(path_str.clone());
-                mount_stack.push((path.to_path_buf(), Subtree::HostBound));
+                mount_stack.push((path.to_path_buf(), Subtree::HostBoundReadOnly));
             }
             Access::Write => {
                 args.push("--bind".to_string());
                 args.push(path_str.clone());
                 args.push(path_str.clone());
-                mount_stack.push((path.to_path_buf(), Subtree::HostBound));
+                mount_stack.push((path.to_path_buf(), Subtree::HostBoundWritable));
             }
         }
     }
@@ -107,25 +128,12 @@ pub fn compile_filesystem_args(
     // resolves through to the canonical mount, while under a tmpfs mask the
     // path would not exist at all. Nothing is ever mounted *through* these
     // links: bwrap cannot mkdir intermediate paths through a symlink.
-    let nearest = |path: &std::path::Path| -> Subtree {
-        let mut best: Option<(&std::path::PathBuf, Subtree)> = None;
-        for (root, kind) in &mount_stack {
-            if path.starts_with(root)
-                && !best.is_some_and(|(best_root, _)| {
-                    root.components().count() > best_root.components().count()
-                })
-            {
-                best = Some((root, *kind));
-            }
-        }
-        best.map(|(_, kind)| kind).unwrap_or(Subtree::Live)
-    };
     let mut seen_links: Vec<std::path::PathBuf> = Vec::new();
     for (canonical, original) in reconstructions {
         if seen_links.iter().any(|link| original.starts_with(link)) {
             continue;
         }
-        if nearest(original) == Subtree::Masked {
+        if nearest_subtree(original, &mount_stack) == Subtree::Masked {
             args.push("--symlink".to_string());
             args.push(canonical.to_string_lossy().to_string());
             args.push(original.to_string_lossy().to_string());
@@ -280,6 +288,42 @@ mod tests {
             &[],
         );
         assert_eq!(args, vec!["--tmpfs", "/home/agent/.ssh"]);
+    }
+
+    #[test]
+    fn missing_denies_under_read_only_parents_need_no_mountpoint() {
+        let absent_secret = PathBuf::from("/etc/oqto");
+        let args = compile_filesystem_args(
+            &policy_with(&[("/etc", Access::Read), ("/etc/oqto", Access::None)]),
+            &Absent(vec![absent_secret]),
+            &[],
+        );
+
+        assert_eq!(args, vec!["--ro-bind", "/etc", "/etc"]);
+    }
+
+    #[test]
+    fn missing_denies_under_writable_parents_are_still_masked() {
+        let denied_path = PathBuf::from("/home/agent/.secret");
+        let args = compile_filesystem_args(
+            &policy_with(&[
+                ("/home/agent", Access::Write),
+                ("/home/agent/.secret", Access::None),
+            ]),
+            &Absent(vec![denied_path]),
+            &[],
+        );
+
+        assert_eq!(
+            args,
+            vec![
+                "--bind",
+                "/home/agent",
+                "/home/agent",
+                "--tmpfs",
+                "/home/agent/.secret",
+            ]
+        );
     }
 
     #[test]

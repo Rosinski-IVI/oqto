@@ -51,10 +51,17 @@ pub async fn serve(spec: EndpointBridgeSpec) -> Result<()> {
     let listener = TcpListener::bind(listen)
         .await
         .with_context(|| format!("binding endpoint {} on {listen}", spec.name))?;
+    serve_listener(listener, spec).await
+}
+
+async fn serve_listener(listener: TcpListener, spec: EndpointBridgeSpec) -> Result<()> {
+    let listen = listener
+        .local_addr()
+        .context("reading endpoint listener address")?;
     info!(
-        "endpoint bridge {}: 127.0.0.1:{} -> {}",
+        "endpoint bridge {}: {} -> {}",
         spec.name,
-        spec.port,
+        listen,
         spec.socket.display()
     );
     loop {
@@ -123,17 +130,17 @@ mod tests {
             }
         });
 
-        // Pick a free port by binding then dropping.
-        let probe = std::net::TcpListener::bind("127.0.0.1:0")?;
-        let port = probe.local_addr()?.port();
-        drop(probe);
+        // Keep the ephemeral port reserved while the bridge starts. Releasing
+        // a probe socket first lets concurrent tests steal the port.
+        let listener = TcpListener::bind("127.0.0.1:0").await?;
+        let port = listener.local_addr()?.port();
 
         let spec = EndpointBridgeSpec {
             name: "echo".to_string(),
             port,
             socket,
         };
-        tokio::spawn(serve(spec));
+        tokio::spawn(serve_listener(listener, spec));
 
         let mut client = loop {
             match tokio::net::TcpStream::connect(("127.0.0.1", port)).await {

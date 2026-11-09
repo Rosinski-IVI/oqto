@@ -7,11 +7,11 @@ use axum::{
     http::{HeaderMap, HeaderValue, header},
     routing::{get, post},
 };
+use dashmap::DashMap;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use sha2::Digest;
 use sqlx::SqlitePool;
-use dashmap::DashMap;
 use std::{
     collections::HashSet,
     net::SocketAddr,
@@ -24,18 +24,17 @@ use crate::{
     api::{ApiError, ApiResult, AppState},
     auth::CurrentUser,
     gitlab::{
-        EVENT_CATEGORIES, GitLabConnection, GitLabRepository, InboxEvent, ProjectMapping,
-        Proposal, TOKEN_CREDENTIAL_ID, normalize_instance_url, project_from_remote,
-        validate_project_path,
+        EVENT_CATEGORIES, GitLabConnection, GitLabRepository, InboxEvent, ProjectMapping, Proposal,
+        TOKEN_CREDENTIAL_ID, normalize_instance_url, project_from_remote, validate_project_path,
     },
     runner::router::{
         ExecutionTarget, resolve_runner_for_target, resolve_target_for_workspace_path,
     },
 };
 use oqto_protocol::gitlab::{
-    GitLabDiscussionPosition, GitLabHttpDispatch, GitLabIssueScope, GitLabIssueState,
-    GitLabAgentOperation, GitLabAgentRpcRequest, GitLabIssueStateEvent,
-    GitLabMergeRequestScope, GitLabMergeRequestState, GitLabOperation,
+    GitLabAgentOperation, GitLabAgentRpcRequest, GitLabDiscussionPosition, GitLabHttpDispatch,
+    GitLabIssueScope, GitLabIssueState, GitLabIssueStateEvent, GitLabMergeRequestScope,
+    GitLabMergeRequestState, GitLabOperation,
 };
 
 const GITLAB_PAGE_SIZE: usize = 50;
@@ -49,21 +48,42 @@ static DRAFT_LOCKS: OnceLock<DashMap<String, Arc<Mutex<()>>>> = OnceLock::new();
 
 pub fn routes() -> Router<AppState> {
     Router::new()
-        .route("/gitlab/config", get(get_config).put(put_config).delete(delete_config))
+        .route(
+            "/gitlab/config",
+            get(get_config).put(put_config).delete(delete_config),
+        )
         .route("/gitlab/test", post(test_connection))
-        .route("/gitlab/mapping", get(get_mapping).put(put_mapping).delete(delete_mapping))
+        .route(
+            "/gitlab/mapping",
+            get(get_mapping).put(put_mapping).delete(delete_mapping),
+        )
         .route("/gitlab/inbox", get(get_inbox))
         .route("/gitlab/inbox/poll", post(poll_inbox_now))
         .route("/gitlab/issues", get(list_gitlab_issues))
         .route("/gitlab/session-selection", post(select_session_issue))
         .route("/gitlab/inbox/counts", get(get_unread_counts))
         .route("/gitlab/inbox/{event_id}/read", post(mark_event_read))
-        .route("/gitlab/proposals", get(list_proposals).post(create_proposal))
-        .route("/gitlab/proposals/{proposal_id}/approve", post(approve_proposal))
-        .route("/gitlab/proposals/{proposal_id}/reject", post(reject_proposal))
-        .route("/gitlab/proposals/{proposal_id}/rebind", post(rebind_proposal))
+        .route(
+            "/gitlab/proposals",
+            get(list_proposals).post(create_proposal),
+        )
+        .route(
+            "/gitlab/proposals/{proposal_id}/approve",
+            post(approve_proposal),
+        )
+        .route(
+            "/gitlab/proposals/{proposal_id}/reject",
+            post(reject_proposal),
+        )
+        .route(
+            "/gitlab/proposals/{proposal_id}/rebind",
+            post(rebind_proposal),
+        )
         .route("/gitlab/merge-requests/draft", post(create_or_update_draft))
-        .route("/gitlab/merge-requests/ready", post(mark_merge_request_ready))
+        .route(
+            "/gitlab/merge-requests/ready",
+            post(mark_merge_request_ready),
+        )
         .layer(DefaultBodyLimit::max(128 * 1024))
         .layer(tower_http::set_header::SetResponseHeaderLayer::overriding(
             header::CACHE_CONTROL,
@@ -124,7 +144,9 @@ async fn select_session_issue(
     )
     .await?;
     if issue.get("iid").and_then(Value::as_u64) != Some(request.issue_iid) {
-        return Err(ApiError::not_found("GitLab issue not found in the mapped project"));
+        return Err(ApiError::not_found(
+            "GitLab issue not found in the mapped project",
+        ));
     }
     repository(&state)?
         .select_issue_for_session(
@@ -136,18 +158,16 @@ async fn select_session_issue(
         )
         .await
         .map_err(internal)?;
-    Ok(Json(json!({"selected": true, "issue_iid": request.issue_iid})))
+    Ok(Json(
+        json!({"selected": true, "issue_iid": request.issue_iid}),
+    ))
 }
 
 fn require_real_auth(state: &AppState) -> ApiResult<()> {
     super::credentials::require_real_auth(state)
 }
 
-fn protected_submission(
-    state: &AppState,
-    peer: SocketAddr,
-    headers: &HeaderMap,
-) -> ApiResult<()> {
+fn protected_submission(state: &AppState, peer: SocketAddr, headers: &HeaderMap) -> ApiResult<()> {
     require_real_auth(state)?;
     super::credentials::validate_submission_channel(
         Some(peer),
@@ -166,7 +186,9 @@ struct SaveConfigRequest {
     event_categories: Vec<String>,
 }
 
-fn default_true() -> bool { true }
+fn default_true() -> bool {
+    true
+}
 fn default_categories() -> Vec<String> {
     EVENT_CATEGORIES
         .iter()
@@ -213,7 +235,9 @@ async fn get_config(
     let Some(connection) = repository.connection(user.id()).await.map_err(internal)? else {
         return Ok(Json(None));
     };
-    let credential = credential_descriptor(&state, user.id(), &connection).await.ok();
+    let credential = credential_descriptor(&state, user.id(), &connection)
+        .await
+        .ok();
     Ok(Json(Some(view(connection, credential.as_ref()))))
 }
 
@@ -246,10 +270,19 @@ async fn put_config(
     Json(request): Json<SaveConfigRequest>,
 ) -> ApiResult<Json<ConnectionView>> {
     protected_submission(&state, peer, &headers)?;
-    let (host, path_prefix) = normalize_instance_url(&request.instance_url)
-        .map_err(|_| ApiError::bad_request("GitLab URL must be a valid HTTPS origin with a safe path prefix on port 443"))?;
-    if request.event_categories.iter().any(|category| !EVENT_CATEGORIES.contains(&category.as_str())) {
-        return Err(ApiError::bad_request("Unsupported GitLab notification category"));
+    let (host, path_prefix) = normalize_instance_url(&request.instance_url).map_err(|_| {
+        ApiError::bad_request(
+            "GitLab URL must be a valid HTTPS origin with a safe path prefix on port 443",
+        )
+    })?;
+    if request
+        .event_categories
+        .iter()
+        .any(|category| !EVENT_CATEGORIES.contains(&category.as_str()))
+    {
+        return Err(ApiError::bad_request(
+            "Unsupported GitLab notification category",
+        ));
     }
     let mut categories = request.event_categories;
     categories.sort();
@@ -261,7 +294,9 @@ async fn put_config(
         .map_err(internal)?;
     // The setup screen can save the instance before a credential is present;
     // report readiness without ever reading or returning its value.
-    let credential = credential_descriptor(&state, user.id(), &connection).await.ok();
+    let credential = credential_descriptor(&state, user.id(), &connection)
+        .await
+        .ok();
     Ok(Json(view(connection, credential.as_ref())))
 }
 
@@ -291,7 +326,9 @@ async fn test_connection(
         .await
         .map_err(|_| ApiError::forbidden("GitLab is unavailable for this workspace"))?;
     if !matches!(target, ExecutionTarget::Personal) {
-        return Err(ApiError::forbidden("GitLab currently requires a personal workspace"));
+        return Err(ApiError::forbidden(
+            "GitLab currently requires a personal workspace",
+        ));
     }
     let repository = repository(&state)?;
     let connection = repository
@@ -407,10 +444,18 @@ async fn put_mapping(
         }
         (None, Some(remote)) => {
             let project = project_from_remote(&remote, &connection.host, &connection.path_prefix)
-                .map_err(|_| ApiError::bad_request("Workspace Git remote does not match the configured GitLab instance"))?;
+                .map_err(|_| {
+                ApiError::bad_request(
+                    "Workspace Git remote does not match the configured GitLab instance",
+                )
+            })?;
             (project, "remote")
         }
-        _ => return Err(ApiError::bad_request("Provide exactly one Git remote or project override")),
+        _ => {
+            return Err(ApiError::bad_request(
+                "Provide exactly one Git remote or project override",
+            ));
+        }
     };
     if repository
         .project_mapped_elsewhere(user.id(), &canonical, &project_path.0)
@@ -474,7 +519,9 @@ async fn workspace_gitlab(
         .await
         .map_err(|_| ApiError::forbidden("GitLab is unavailable for this workspace"))?;
     if !matches!(target, ExecutionTarget::Personal) {
-        return Err(ApiError::forbidden("GitLab currently requires a personal workspace"));
+        return Err(ApiError::forbidden(
+            "GitLab currently requires a personal workspace",
+        ));
     }
     let repository = repository(state)?;
     let mut connection = repository
@@ -493,9 +540,7 @@ async fn workspace_gitlab(
         .map_err(|_| ApiError::service_unavailable("GitLab credential runner unavailable"))?
         .ok_or_else(|| ApiError::service_unavailable("GitLab credential runner unavailable"))?;
     let credential = credential_descriptor_with_runner(&runner, account_id, &connection).await?;
-    if connection.validated_credential_revision.as_deref()
-        != Some(credential.revision.as_str())
-    {
+    if connection.validated_credential_revision.as_deref() != Some(credential.revision.as_str()) {
         let response = runner
             .gitlab_http(GitLabHttpDispatch {
                 account_id: account_id.to_owned(),
@@ -513,7 +558,9 @@ async fn workspace_gitlab(
             .get("username")
             .and_then(Value::as_str)
             .filter(|value| !value.is_empty() && value.len() <= 255)
-            .ok_or_else(|| ApiError::service_unavailable("GitLab returned an invalid user identity"))?;
+            .ok_or_else(|| {
+                ApiError::service_unavailable("GitLab returned an invalid user identity")
+            })?;
         if !repository
             .mark_connection_tested(
                 account_id,
@@ -570,7 +617,9 @@ async fn credential_descriptor_with_runner(
     runner
         .describe_credential(account_id.to_owned(), connection.credential_id.clone())
         .await
-        .map_err(|_| ApiError::bad_request("Save a 'gitlab' token in Host credentials and unlock the vault"))
+        .map_err(|_| {
+            ApiError::bad_request("Save a 'gitlab' token in Host credentials and unlock the vault")
+        })
 }
 
 async fn call_gitlab(
@@ -693,7 +742,10 @@ async fn list_gitlab_issues(
     let context = workspace_gitlab(&state, user.id(), &query.workspace_path).await?;
     let mut by_iid = std::collections::BTreeMap::<u64, Value>::new();
     let mut truncated = false;
-    for scope in [GitLabIssueScope::AssignedToMe, GitLabIssueScope::CreatedByMe] {
+    for scope in [
+        GitLabIssueScope::AssignedToMe,
+        GitLabIssueScope::CreatedByMe,
+    ] {
         for page in 1..=MAX_POLL_PAGES {
             let value = call_gitlab(
                 &context,
@@ -708,7 +760,9 @@ async fn list_gitlab_issues(
             )
             .await?;
             let Some(rows) = value.as_array() else {
-                return Err(ApiError::service_unavailable("GitLab returned an invalid issue list"));
+                return Err(ApiError::service_unavailable(
+                    "GitLab returned an invalid issue list",
+                ));
             };
             for row in rows {
                 if let Some(iid) = row.get("iid").and_then(Value::as_u64) {
@@ -738,15 +792,35 @@ async fn list_gitlab_issues(
             let labels = row
                 .get("labels")
                 .and_then(Value::as_array)
-                .map(|labels| labels.iter().filter_map(Value::as_str).map(str::to_owned).collect::<Vec<_>>())
+                .map(|labels| {
+                    labels
+                        .iter()
+                        .filter_map(Value::as_str)
+                        .map(str::to_owned)
+                        .collect::<Vec<_>>()
+                })
                 .unwrap_or_default();
-            let state = row.get("state").and_then(Value::as_str).unwrap_or("opened").to_owned();
+            let state = row
+                .get("state")
+                .and_then(Value::as_str)
+                .unwrap_or("opened")
+                .to_owned();
             let (status, status_conflict) = issue_status(&state, &labels);
             GitLabTicketView {
                 iid,
                 id: iid.to_string(),
-                title: row.get("title").and_then(Value::as_str).unwrap_or("GitLab issue").to_owned(),
-                description: row.get("description").and_then(Value::as_str).unwrap_or_default().chars().take(32 * 1024).collect(),
+                title: row
+                    .get("title")
+                    .and_then(Value::as_str)
+                    .unwrap_or("GitLab issue")
+                    .to_owned(),
+                description: row
+                    .get("description")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default()
+                    .chars()
+                    .take(32 * 1024)
+                    .collect(),
                 state,
                 status,
                 status_conflict,
@@ -760,7 +834,11 @@ async fn list_gitlab_issues(
                     &context.connection.host,
                     &context.connection.path_prefix,
                 ),
-                updated_at: row.get("updated_at").and_then(Value::as_str).unwrap_or_default().to_owned(),
+                updated_at: row
+                    .get("updated_at")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default()
+                    .to_owned(),
                 merge_request_iid: linked_merge_requests.get(&iid).copied(),
             }
         })
@@ -796,10 +874,10 @@ pub(crate) async fn handle_agent_rpc(
         .selected_issue_for_session(account_id, session_id)
         .await
         .map_err(internal)?
-        .ok_or_else(|| ApiError::forbidden("Select a GitLab issue in this session before using GitLab tools"))?;
-    if selection.0 != context.canonical_path
-        || selection.1 != context.mapping.project_path
-    {
+        .ok_or_else(|| {
+            ApiError::forbidden("Select a GitLab issue in this session before using GitLab tools")
+        })?;
+    if selection.0 != context.canonical_path || selection.1 != context.mapping.project_path {
         return Err(ApiError::conflict(
             "The selected GitLab issue is stale because the workspace mapping changed",
         ));
@@ -821,9 +899,18 @@ pub(crate) async fn handle_agent_rpc(
             let labels = issue
                 .get("labels")
                 .and_then(Value::as_array)
-                .map(|items| items.iter().filter_map(Value::as_str).map(str::to_owned).collect::<Vec<_>>())
+                .map(|items| {
+                    items
+                        .iter()
+                        .filter_map(Value::as_str)
+                        .map(str::to_owned)
+                        .collect::<Vec<_>>()
+                })
                 .unwrap_or_default();
-            let state = issue.get("state").and_then(Value::as_str).unwrap_or("opened");
+            let state = issue
+                .get("state")
+                .and_then(Value::as_str)
+                .unwrap_or("opened");
             let (status, status_conflict) = issue_status(state, &labels);
             Ok(json!({
                 "iid": issue_iid,
@@ -855,7 +942,9 @@ pub(crate) async fn handle_agent_rpc(
                 )
                 .await?;
                 let Some(notes) = response.as_array() else {
-                    return Err(ApiError::service_unavailable("GitLab returned an invalid issue note list"));
+                    return Err(ApiError::service_unavailable(
+                        "GitLab returned an invalid issue note list",
+                    ));
                 };
                 for note in notes {
                     if note.get("system").and_then(Value::as_bool) == Some(true) {
@@ -879,8 +968,10 @@ pub(crate) async fn handle_agent_rpc(
         }
         GitLabAgentOperation::ReadLinkedMergeRequest => {
             let tracked = tracked_merge_request(state, account_id, &context, issue_iid).await?;
-            let merge_request_iid = tracked.get("iid").and_then(Value::as_u64)
-                .ok_or_else(|| ApiError::service_unavailable("Linked merge request IID is invalid"))?;
+            let merge_request_iid =
+                tracked.get("iid").and_then(Value::as_u64).ok_or_else(|| {
+                    ApiError::service_unavailable("Linked merge request IID is invalid")
+                })?;
             let merge_request = call_gitlab(
                 &context,
                 account_id,
@@ -894,11 +985,14 @@ pub(crate) async fn handle_agent_rpc(
             Ok(sanitize_agent_merge_request(&merge_request, &context))
         }
         GitLabAgentOperation::ReadLinkedMergeRequestDiscussions => {
-            let merge_request = tracked_merge_request(state, account_id, &context, issue_iid).await?;
+            let merge_request =
+                tracked_merge_request(state, account_id, &context, issue_iid).await?;
             let merge_request_iid = merge_request
                 .get("iid")
                 .and_then(Value::as_u64)
-                .ok_or_else(|| ApiError::service_unavailable("Linked merge request IID is invalid"))?;
+                .ok_or_else(|| {
+                    ApiError::service_unavailable("Linked merge request IID is invalid")
+                })?;
             let mut result = Vec::new();
             for page in 1..=2 {
                 let response = call_gitlab(
@@ -912,7 +1006,9 @@ pub(crate) async fn handle_agent_rpc(
                 )
                 .await?;
                 let Some(discussions) = response.as_array() else {
-                    return Err(ApiError::service_unavailable("GitLab returned an invalid discussion list"));
+                    return Err(ApiError::service_unavailable(
+                        "GitLab returned an invalid discussion list",
+                    ));
                 };
                 for discussion in discussions {
                     if result.len() >= 8 {
@@ -969,13 +1065,33 @@ pub(crate) async fn handle_agent_rpc(
             }))
         }
         GitLabAgentOperation::ProposeImplementationStart => {
-            create_agent_proposal(&context, account_id, session_id, &rpc_request_id, issue_iid, "start_implementation", json!({})).await
+            create_agent_proposal(
+                &context,
+                account_id,
+                session_id,
+                &rpc_request_id,
+                issue_iid,
+                "start_implementation",
+                json!({}),
+            )
+            .await
         }
-        GitLabAgentOperation::ProposeIssueUpdate { title, description, labels, state_event } => {
+        GitLabAgentOperation::ProposeIssueUpdate {
+            title,
+            description,
+            labels,
+            state_event,
+        } => {
             if title.is_none() && description.is_none() && labels.is_none() && state_event.is_none()
-                || title.as_ref().is_some_and(|value| value.trim().is_empty() || value.len() > 255)
-                || description.as_ref().is_some_and(|value| value.len() > 64 * 1024)
-                || labels.as_ref().is_some_and(|items| items.len() > 50 || items.iter().any(|label| label.len() > 128))
+                || title
+                    .as_ref()
+                    .is_some_and(|value| value.trim().is_empty() || value.len() > 255)
+                || description
+                    .as_ref()
+                    .is_some_and(|value| value.len() > 64 * 1024)
+                || labels.as_ref().is_some_and(|items| {
+                    items.len() > 50 || items.iter().any(|label| label.len() > 128)
+                })
             {
                 return Err(ApiError::bad_request("Invalid issue proposal"));
             }
@@ -986,7 +1102,8 @@ pub(crate) async fn handle_agent_rpc(
                     .map(String::as_str)
                     .collect();
                 if !workflow_labels.is_empty() {
-                    require_existing_workflow_labels(&context, account_id, &workflow_labels).await?;
+                    require_existing_workflow_labels(&context, account_id, &workflow_labels)
+                        .await?;
                 }
             }
             let current = call_gitlab(
@@ -1001,12 +1118,24 @@ pub(crate) async fn handle_agent_rpc(
             let original_labels = current
                 .get("labels")
                 .and_then(Value::as_array)
-                .map(|items| items.iter().filter_map(Value::as_str).map(str::to_owned).collect::<Vec<_>>())
+                .map(|items| {
+                    items
+                        .iter()
+                        .filter_map(Value::as_str)
+                        .map(str::to_owned)
+                        .collect::<Vec<_>>()
+                })
                 .unwrap_or_default();
             if labels.is_some()
-                && original_labels.iter().filter(|label| canonical_workflow_labels().contains(&label.as_str())).count() > 1
+                && original_labels
+                    .iter()
+                    .filter(|label| canonical_workflow_labels().contains(&label.as_str()))
+                    .count()
+                    > 1
             {
-                return Err(ApiError::conflict("Resolve conflicting Oqto workflow labels before proposing a status change"));
+                return Err(ApiError::conflict(
+                    "Resolve conflicting Oqto workflow labels before proposing a status change",
+                ));
             }
             let original = json!({
                 "title": current.get("title").and_then(Value::as_str).unwrap_or_default(),
@@ -1030,18 +1159,41 @@ pub(crate) async fn handle_agent_rpc(
             if body.trim().is_empty() || body.len() > 32 * 1024 {
                 return Err(ApiError::bad_request("Invalid issue comment proposal"));
             }
-            create_agent_proposal(&context, account_id, session_id, &rpc_request_id, issue_iid, "comment", json!({"body":body})).await
+            create_agent_proposal(
+                &context,
+                account_id,
+                session_id,
+                &rpc_request_id,
+                issue_iid,
+                "comment",
+                json!({"body":body}),
+            )
+            .await
         }
-        GitLabAgentOperation::ProposeDiscussionReply { discussion_id, body } => {
-            if discussion_id.is_empty() || discussion_id.len() > 128
-                || !discussion_id.bytes().all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_'))
-                || body.trim().is_empty() || body.len() > 32 * 1024
+        GitLabAgentOperation::ProposeDiscussionReply {
+            discussion_id,
+            body,
+        } => {
+            if discussion_id.is_empty()
+                || discussion_id.len() > 128
+                || !discussion_id
+                    .bytes()
+                    .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_'))
+                || body.trim().is_empty()
+                || body.len() > 32 * 1024
             {
-                return Err(ApiError::bad_request("Invalid merge request discussion reply"));
+                return Err(ApiError::bad_request(
+                    "Invalid merge request discussion reply",
+                ));
             }
-            let merge_request = tracked_merge_request(state, account_id, &context, issue_iid).await?;
-            let merge_request_iid = merge_request.get("iid").and_then(Value::as_u64)
-                .ok_or_else(|| ApiError::service_unavailable("Linked merge request IID is invalid"))?;
+            let merge_request =
+                tracked_merge_request(state, account_id, &context, issue_iid).await?;
+            let merge_request_iid = merge_request
+                .get("iid")
+                .and_then(Value::as_u64)
+                .ok_or_else(|| {
+                    ApiError::service_unavailable("Linked merge request IID is invalid")
+                })?;
             create_agent_proposal(
                 &context,
                 account_id,
@@ -1054,14 +1206,26 @@ pub(crate) async fn handle_agent_rpc(
             .await
         }
         GitLabAgentOperation::ProposeInlineReview { comments } => {
-            if comments.is_empty() || comments.len() > 50
-                || comments.iter().any(|comment| comment.path.is_empty() || comment.path.len() > 1024 || comment.line == 0 || comment.body.trim().is_empty() || comment.body.len() > 32 * 1024)
+            if comments.is_empty()
+                || comments.len() > 50
+                || comments.iter().any(|comment| {
+                    comment.path.is_empty()
+                        || comment.path.len() > 1024
+                        || comment.line == 0
+                        || comment.body.trim().is_empty()
+                        || comment.body.len() > 32 * 1024
+                })
             {
                 return Err(ApiError::bad_request("Invalid inline review proposal"));
             }
-            let merge_request = tracked_merge_request(state, account_id, &context, issue_iid).await?;
-            let merge_request_iid = merge_request.get("iid").and_then(Value::as_u64)
-                .ok_or_else(|| ApiError::service_unavailable("Linked merge request IID is invalid"))?;
+            let merge_request =
+                tracked_merge_request(state, account_id, &context, issue_iid).await?;
+            let merge_request_iid = merge_request
+                .get("iid")
+                .and_then(Value::as_u64)
+                .ok_or_else(|| {
+                    ApiError::service_unavailable("Linked merge request IID is invalid")
+                })?;
             let merge_request = call_gitlab(
                 &context,
                 account_id,
@@ -1087,7 +1251,12 @@ pub(crate) async fn handle_agent_rpc(
             )
             .await
         }
-        GitLabAgentOperation::CreateOrUpdateDraft { remote_name, title, description, target_branch } => {
+        GitLabAgentOperation::CreateOrUpdateDraft {
+            remote_name,
+            title,
+            description,
+            target_branch,
+        } => {
             let git_context = crate::api::ws_multiplexed::git::inspect_gitlab_workspace(
                 state,
                 account_id,
@@ -1101,21 +1270,35 @@ pub(crate) async fn handle_agent_rpc(
             let matching: Vec<String> = git_context
                 .get("matching_remote_names")
                 .and_then(Value::as_array)
-                .map(|items| items.iter().filter_map(Value::as_str).map(str::to_owned).collect())
+                .map(|items| {
+                    items
+                        .iter()
+                        .filter_map(Value::as_str)
+                        .map(str::to_owned)
+                        .collect()
+                })
                 .unwrap_or_default();
             let origin_matches = matching.iter().any(|name| name == "origin");
             let selected_remote = match (origin_matches, remote_name) {
                 (true, Some(remote)) if remote == "origin" => remote,
-                (true, Some(_)) => return Err(ApiError::bad_request(
-                    "A matching origin is configured; Oqto uses origin for agent-driven GitLab pushes",
-                )),
+                (true, Some(_)) => {
+                    return Err(ApiError::bad_request(
+                        "A matching origin is configured; Oqto uses origin for agent-driven GitLab pushes",
+                    ));
+                }
                 (true, None) => "origin".to_owned(),
                 (false, Some(remote)) if matching.iter().any(|name| name == &remote) => remote,
-                (false, Some(_)) => return Err(ApiError::bad_request("Selected remote does not match the mapped GitLab project")),
-                (false, None) => return Err(ApiError::conflict(format!(
-                    "origin does not match this GitLab project. Ask the user which matching remote to push: {}",
-                    matching.join(", ")
-                ))),
+                (false, Some(_)) => {
+                    return Err(ApiError::bad_request(
+                        "Selected remote does not match the mapped GitLab project",
+                    ));
+                }
+                (false, None) => {
+                    return Err(ApiError::conflict(format!(
+                        "origin does not match this GitLab project. Ask the user which matching remote to push: {}",
+                        matching.join(", ")
+                    )));
+                }
             };
             let merge_request = create_draft_for_context(
                 state,
@@ -1134,7 +1317,9 @@ pub(crate) async fn handle_agent_rpc(
     }?;
     let response_size = serde_json::to_vec(&response).map_err(internal)?.len();
     if response_size > 128 * 1024 {
-        return Err(ApiError::bad_request("GitLab agent RPC response exceeds the size limit"));
+        return Err(ApiError::bad_request(
+            "GitLab agent RPC response exceeds the size limit",
+        ));
     }
     Ok(response)
 }
@@ -1148,10 +1333,14 @@ async fn create_agent_proposal(
     kind: &str,
     payload: Value,
 ) -> ApiResult<Value> {
-    let digest = sha2::Sha256::digest(format!("{account_id}:{session_id}:{rpc_request_id}").as_bytes());
+    let digest =
+        sha2::Sha256::digest(format!("{account_id}:{session_id}:{rpc_request_id}").as_bytes());
     let id = format!(
         "glprop_agent_{}",
-        digest.iter().map(|byte| format!("{:02x}", *byte)).collect::<String>()
+        digest
+            .iter()
+            .map(|byte| format!("{:02x}", *byte))
+            .collect::<String>()
     );
     if let Some(existing) = context
         .repository
@@ -1166,7 +1355,9 @@ async fn create_agent_proposal(
         {
             return serde_json::to_value(existing).map_err(internal);
         }
-        return Err(ApiError::conflict("GitLab RPC request ID was already used for a different operation"));
+        return Err(ApiError::conflict(
+            "GitLab RPC request ID was already used for a different operation",
+        ));
     }
     let proposal = Proposal {
         id,
@@ -1306,15 +1497,63 @@ async fn poll_workspace(
     let repository = context.repository.clone();
     for category in &context.connection.event_categories {
         match category.as_str() {
-            "assigned_issues" => poll_issues(&repository, &context, account_id, category, "assigned_issues", GitLabIssueScope::AssignedToMe).await?,
-            "authored_issues" => poll_issues(&repository, &context, account_id, category, "authored_issues", GitLabIssueScope::CreatedByMe).await?,
+            "assigned_issues" => {
+                poll_issues(
+                    &repository,
+                    &context,
+                    account_id,
+                    category,
+                    "assigned_issues",
+                    GitLabIssueScope::AssignedToMe,
+                )
+                .await?
+            }
+            "authored_issues" => {
+                poll_issues(
+                    &repository,
+                    &context,
+                    account_id,
+                    category,
+                    "authored_issues",
+                    GitLabIssueScope::CreatedByMe,
+                )
+                .await?
+            }
             "project_activity" => {
-                poll_issues(&repository, &context, account_id, category, "project_issues", GitLabIssueScope::All).await?;
-                poll_merge_requests(&repository, &context, account_id, category, "project_mrs", GitLabMergeRequestScope::All, GitLabMergeRequestState::All, None).await?;
+                poll_issues(
+                    &repository,
+                    &context,
+                    account_id,
+                    category,
+                    "project_issues",
+                    GitLabIssueScope::All,
+                )
+                .await?;
+                poll_merge_requests(
+                    &repository,
+                    &context,
+                    account_id,
+                    category,
+                    "project_mrs",
+                    GitLabMergeRequestScope::All,
+                    GitLabMergeRequestState::All,
+                    None,
+                )
+                .await?;
             }
             "mentions_review_requests" => {
                 let (reviewer_id, username) = current_gitlab_identity(&context, account_id).await?;
-                poll_merge_requests(&repository, &context, account_id, category, "review_requests", GitLabMergeRequestScope::All, GitLabMergeRequestState::Opened, Some(reviewer_id)).await?;
+                poll_merge_requests(
+                    &repository,
+                    &context,
+                    account_id,
+                    category,
+                    "review_requests",
+                    GitLabMergeRequestScope::All,
+                    GitLabMergeRequestState::Opened,
+                    Some(reviewer_id),
+                )
+                .await?;
                 poll_issue_mentions(&repository, &context, account_id, &username).await?;
                 poll_merge_request_mentions(&repository, &context, account_id, &username).await?;
             }
@@ -1637,67 +1876,68 @@ async fn poll_linked_discussions(
                     continue;
                 };
                 for note in notes {
-                if note.get("system").and_then(Value::as_bool) == Some(true) {
-                    continue;
-                }
-                let note_id = note.get("id").and_then(Value::as_u64).unwrap_or_default();
-                let occurred_at = note
-                    .get("updated_at")
-                    .or_else(|| note.get("created_at"))
-                    .and_then(Value::as_str)
-                    .unwrap_or_default();
-                if note_id == 0 || occurred_at.is_empty() {
-                    continue;
-                }
-                if !timestamp_at_or_after(occurred_at, Some(initial_cutoff.as_str())) {
-                    continue;
-                }
-                let body = note.get("body").and_then(Value::as_str).unwrap_or_default();
-                if body.trim().is_empty() {
-                    continue;
-                }
-                let author = note
-                    .get("author")
-                    .and_then(|author| author.get("username"))
-                    .and_then(Value::as_str)
-                    .unwrap_or("GitLab user");
-                let event_key = format!(
-                    "discussion:{}:{}:{mr_iid}:{note_id}:{occurred_at}",
-                    context.canonical_path, workflow.project_path
-                );
-                repository
-                    .record_event(
-                        account_id,
-                        &InboxEvent {
-                            id: Uuid::new_v4().to_string(),
-                            workspace_path: context.canonical_path.clone(),
-                            project_path: workflow.project_path.clone(),
-                            category: event_category.to_owned(),
-                            categories: vec![event_category.to_owned()],
-                            coalesce_key: None,
-                            entity_kind: "merge_request".to_owned(),
-                            entity_iid: workflow.merge_request_iid,
-                            related_issue_iid,
-                            discussion_id: discussion
-                                .get("id")
-                                .and_then(Value::as_str)
-                                .map(str::to_owned),
-                            session_id: workflow.session_id.clone(),
-                            title: format!("New discussion on merge request !{mr_iid}"),
-                            summary: summarize(&format!("{author}: {body}")),
-                            url: Some(format!(
-                                "https://{}{}{}/-/merge_requests/{mr_iid}",
-                                context.connection.host,
-                                context.connection.path_prefix,
-                                format!("/{}", workflow.project_path)
-                            )),
-                            occurred_at: occurred_at.to_owned(),
-                            read_at: None,
-                        },
-                        &event_key,
-                    )
-                    .await
-                    .map_err(internal)?;
+                    if note.get("system").and_then(Value::as_bool) == Some(true) {
+                        continue;
+                    }
+                    let note_id = note.get("id").and_then(Value::as_u64).unwrap_or_default();
+                    let occurred_at = note
+                        .get("updated_at")
+                        .or_else(|| note.get("created_at"))
+                        .and_then(Value::as_str)
+                        .unwrap_or_default();
+                    if note_id == 0 || occurred_at.is_empty() {
+                        continue;
+                    }
+                    if !timestamp_at_or_after(occurred_at, Some(initial_cutoff.as_str())) {
+                        continue;
+                    }
+                    let body = note.get("body").and_then(Value::as_str).unwrap_or_default();
+                    if body.trim().is_empty() {
+                        continue;
+                    }
+                    let author = note
+                        .get("author")
+                        .and_then(|author| author.get("username"))
+                        .and_then(Value::as_str)
+                        .unwrap_or("GitLab user");
+                    let event_key = format!(
+                        "discussion:{}:{}:{mr_iid}:{note_id}:{occurred_at}",
+                        context.canonical_path, workflow.project_path
+                    );
+                    let project_path = format!("/{}", workflow.project_path);
+                    repository
+                        .record_event(
+                            account_id,
+                            &InboxEvent {
+                                id: Uuid::new_v4().to_string(),
+                                workspace_path: context.canonical_path.clone(),
+                                project_path: workflow.project_path.clone(),
+                                category: event_category.to_owned(),
+                                categories: vec![event_category.to_owned()],
+                                coalesce_key: None,
+                                entity_kind: "merge_request".to_owned(),
+                                entity_iid: workflow.merge_request_iid,
+                                related_issue_iid,
+                                discussion_id: discussion
+                                    .get("id")
+                                    .and_then(Value::as_str)
+                                    .map(str::to_owned),
+                                session_id: workflow.session_id.clone(),
+                                title: format!("New discussion on merge request !{mr_iid}"),
+                                summary: summarize(&format!("{author}: {body}")),
+                                url: Some(format!(
+                                    "https://{}{}{}/-/merge_requests/{mr_iid}",
+                                    context.connection.host,
+                                    context.connection.path_prefix,
+                                    project_path
+                                )),
+                                occurred_at: occurred_at.to_owned(),
+                                read_at: None,
+                            },
+                            &event_key,
+                        )
+                        .await
+                        .map_err(internal)?;
                 }
             }
             if discussions.len() < GITLAB_PAGE_SIZE {
@@ -1750,7 +1990,10 @@ async fn poll_issues(
             let Some(entity_iid) = i64::try_from(iid).ok() else {
                 continue;
             };
-            let updated_at = row.get("updated_at").and_then(Value::as_str).unwrap_or_default();
+            let updated_at = row
+                .get("updated_at")
+                .and_then(Value::as_str)
+                .unwrap_or_default();
             if iid == 0 || updated_at.is_empty() {
                 continue;
             }
@@ -1787,7 +2030,11 @@ async fn poll_issues(
                     .chars()
                     .take(255)
                     .collect(),
-                summary: summarize(row.get("description").and_then(Value::as_str).unwrap_or_default()),
+                summary: summarize(
+                    row.get("description")
+                        .and_then(Value::as_str)
+                        .unwrap_or_default(),
+                ),
                 url: safe_web_url(
                     row.get("web_url").and_then(Value::as_str),
                     &context.connection.host,
@@ -1796,7 +2043,10 @@ async fn poll_issues(
                 occurred_at: updated_at.to_owned(),
                 read_at: None,
             };
-            repository.record_event(account_id, &event, &event_key).await.map_err(internal)?;
+            repository
+                .record_event(account_id, &event, &event_key)
+                .await
+                .map_err(internal)?;
         }
         if rows.len() < GITLAB_PAGE_SIZE {
             if let Some(latest) = cursor_state.pending_latest.take() {
@@ -1804,8 +2054,7 @@ async fn poll_issues(
             }
             cursor_state.next_page = 1;
             cursor_state.next_offset = 0;
-            let next_cursor = serde_json::to_string(&cursor_state)
-                .map_err(internal)?;
+            let next_cursor = serde_json::to_string(&cursor_state).map_err(internal)?;
             repository
                 .save_cursor(
                     account_id,
@@ -1899,7 +2148,10 @@ async fn poll_issue_mentions(
             let Some(entity_iid) = i64::try_from(iid).ok() else {
                 continue;
             };
-            let updated_at = row.get("updated_at").and_then(Value::as_str).unwrap_or_default();
+            let updated_at = row
+                .get("updated_at")
+                .and_then(Value::as_str)
+                .unwrap_or_default();
             if iid == 0 || updated_at.is_empty() {
                 continue;
             }
@@ -1910,8 +2162,14 @@ async fn poll_issue_mentions(
             {
                 cursor_state.pending_latest = Some(updated_at.to_owned());
             }
-            let title = row.get("title").and_then(Value::as_str).unwrap_or("GitLab issue");
-            let description = row.get("description").and_then(Value::as_str).unwrap_or_default();
+            let title = row
+                .get("title")
+                .and_then(Value::as_str)
+                .unwrap_or("GitLab issue");
+            let description = row
+                .get("description")
+                .and_then(Value::as_str)
+                .unwrap_or_default();
             let issue_url = safe_web_url(
                 row.get("web_url").and_then(Value::as_str),
                 &context.connection.host,
@@ -2011,7 +2269,10 @@ async fn poll_issue_mentions(
                                 related_issue_iid: None,
                                 discussion_id: None,
                                 session_id: None,
-                                title: format!("Mention on issue #{iid}: {title}").chars().take(255).collect(),
+                                title: format!("Mention on issue #{iid}: {title}")
+                                    .chars()
+                                    .take(255)
+                                    .collect(),
                                 summary: summarize(&format!("{author}: {body}")),
                                 url: issue_url.clone(),
                                 occurred_at: note_time.to_owned(),
@@ -2033,8 +2294,14 @@ async fn poll_issue_mentions(
             }
             cursor_state.next_page = 1;
             cursor_state.next_offset = 0;
-            save_poll_cursor(repository, account_id, context, "mentions_issues", &cursor_state)
-                .await?;
+            save_poll_cursor(
+                repository,
+                account_id,
+                context,
+                "mentions_issues",
+                &cursor_state,
+            )
+            .await?;
             return Ok(());
         }
         page = page.saturating_add(1);
@@ -2042,7 +2309,14 @@ async fn poll_issue_mentions(
     }
     cursor_state.next_page = page;
     cursor_state.next_offset = offset;
-    save_poll_cursor(repository, account_id, context, "mentions_issues", &cursor_state).await
+    save_poll_cursor(
+        repository,
+        account_id,
+        context,
+        "mentions_issues",
+        &cursor_state,
+    )
+    .await
 }
 
 async fn save_poll_cursor(
@@ -2108,7 +2382,10 @@ async fn poll_merge_request_mentions(
             let Some(entity_iid) = i64::try_from(iid).ok() else {
                 continue;
             };
-            let updated_at = row.get("updated_at").and_then(Value::as_str).unwrap_or_default();
+            let updated_at = row
+                .get("updated_at")
+                .and_then(Value::as_str)
+                .unwrap_or_default();
             if iid == 0 || updated_at.is_empty() {
                 continue;
             }
@@ -2171,8 +2448,14 @@ async fn poll_merge_request_mentions(
             if lookups >= MAX_MENTION_ISSUE_LOOKUPS {
                 cursor_state.next_page = page;
                 cursor_state.next_offset = index;
-                save_poll_cursor(repository, account_id, context, "mentions_mrs", &cursor_state)
-                    .await?;
+                save_poll_cursor(
+                    repository,
+                    account_id,
+                    context,
+                    "mentions_mrs",
+                    &cursor_state,
+                )
+                .await?;
                 return Ok(());
             }
             lookups += 1;
@@ -2261,8 +2544,14 @@ async fn poll_merge_request_mentions(
             }
             cursor_state.next_page = 1;
             cursor_state.next_offset = 0;
-            save_poll_cursor(repository, account_id, context, "mentions_mrs", &cursor_state)
-                .await?;
+            save_poll_cursor(
+                repository,
+                account_id,
+                context,
+                "mentions_mrs",
+                &cursor_state,
+            )
+            .await?;
             return Ok(());
         }
         page = page.saturating_add(1);
@@ -2270,11 +2559,21 @@ async fn poll_merge_request_mentions(
     }
     cursor_state.next_page = page;
     cursor_state.next_offset = offset;
-    save_poll_cursor(repository, account_id, context, "mentions_mrs", &cursor_state).await
+    save_poll_cursor(
+        repository,
+        account_id,
+        context,
+        "mentions_mrs",
+        &cursor_state,
+    )
+    .await
 }
 
 fn closing_issue_iid(description: &str) -> Option<i64> {
-    let regex = regex::Regex::new(r"(?i)\b(?:close[sd]?|fix(?:es|ed)?|resolve[sd]?)\s+#([1-9][0-9]{0,18})\b").ok()?;
+    let regex = regex::Regex::new(
+        r"(?i)\b(?:close[sd]?|fix(?:es|ed)?|resolve[sd]?)\s+#([1-9][0-9]{0,18})\b",
+    )
+    .ok()?;
     regex.captures(description)?.get(1)?.as_str().parse().ok()
 }
 
@@ -2375,7 +2674,10 @@ async fn poll_merge_requests(
             let Some(entity_iid) = i64::try_from(iid).ok() else {
                 continue;
             };
-            let updated_at = row.get("updated_at").and_then(Value::as_str).unwrap_or_default();
+            let updated_at = row
+                .get("updated_at")
+                .and_then(Value::as_str)
+                .unwrap_or_default();
             if iid == 0 || updated_at.is_empty() {
                 continue;
             }
@@ -2412,7 +2714,11 @@ async fn poll_merge_requests(
                     .chars()
                     .take(255)
                     .collect(),
-                summary: summarize(row.get("description").and_then(Value::as_str).unwrap_or_default()),
+                summary: summarize(
+                    row.get("description")
+                        .and_then(Value::as_str)
+                        .unwrap_or_default(),
+                ),
                 url: safe_web_url(
                     row.get("web_url").and_then(Value::as_str),
                     &context.connection.host,
@@ -2421,7 +2727,10 @@ async fn poll_merge_requests(
                 occurred_at: updated_at.to_owned(),
                 read_at: None,
             };
-            repository.record_event(account_id, &event, &event_key).await.map_err(internal)?;
+            repository
+                .record_event(account_id, &event, &event_key)
+                .await
+                .map_err(internal)?;
         }
         if rows.len() < GITLAB_PAGE_SIZE {
             if let Some(latest) = cursor_state.pending_latest.take() {
@@ -2466,9 +2775,7 @@ fn summarize(value: &str) -> String {
 
 fn safe_web_url(value: Option<&str>, host: &str, path_prefix: &str) -> Option<String> {
     let (_, authority_and_path) = value?.split_once("://")?;
-    let authority = authority_and_path
-        .split(['/', '?', '#'])
-        .next()?;
+    let authority = authority_and_path.split(['/', '?', '#']).next()?;
     if authority.contains('@') {
         return None;
     }
@@ -2490,25 +2797,36 @@ fn safe_web_url(value: Option<&str>, host: &str, path_prefix: &str) -> Option<St
 #[derive(Debug, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 enum ProposalDraft {
-    StartImplementation { #[serde(default)] session_id: Option<String> },
+    StartImplementation {
+        #[serde(default)]
+        session_id: Option<String>,
+    },
     UpdateIssue {
-        #[serde(default)] session_id: Option<String>,
-        #[serde(default)] title: Option<String>,
-        #[serde(default)] description: Option<String>,
-        #[serde(default)] labels: Option<Vec<String>>,
-        #[serde(default)] state_event: Option<GitLabIssueStateEvent>,
+        #[serde(default)]
+        session_id: Option<String>,
+        #[serde(default)]
+        title: Option<String>,
+        #[serde(default)]
+        description: Option<String>,
+        #[serde(default)]
+        labels: Option<Vec<String>>,
+        #[serde(default)]
+        state_event: Option<GitLabIssueStateEvent>,
     },
     Comment {
-        #[serde(default)] session_id: Option<String>,
+        #[serde(default)]
+        session_id: Option<String>,
         body: String,
     },
     InlineReview {
-        #[serde(default)] session_id: Option<String>,
+        #[serde(default)]
+        session_id: Option<String>,
         merge_request_iid: u64,
         comments: Vec<InlineReviewComment>,
     },
     DiscussionReply {
-        #[serde(default)] session_id: Option<String>,
+        #[serde(default)]
+        session_id: Option<String>,
         merge_request_iid: u64,
         discussion_id: String,
         body: String,
@@ -2540,21 +2858,42 @@ async fn create_proposal(
     Json(request): Json<CreateProposalRequest>,
 ) -> ApiResult<Json<Proposal>> {
     protected_submission(&state, peer, &headers)?;
-    if request.issue_iid == 0 { return Err(ApiError::bad_request("GitLab issue IID must be positive")); }
+    if request.issue_iid == 0 {
+        return Err(ApiError::bad_request("GitLab issue IID must be positive"));
+    }
     let context = workspace_gitlab(&state, user.id(), &request.workspace_path).await?;
     let (kind, payload, session_id) = match request.proposal {
         ProposalDraft::StartImplementation { session_id } => {
-            if session_id.as_ref().is_some_and(|id| id.is_empty() || id.len() > 128 || id.chars().any(char::is_control)) {
+            if session_id.as_ref().is_some_and(|id| {
+                id.is_empty() || id.len() > 128 || id.chars().any(char::is_control)
+            }) {
                 return Err(ApiError::bad_request("Invalid session identifier"));
             }
             ("start_implementation", json!({}), session_id)
         }
-        ProposalDraft::UpdateIssue { session_id, title, description, labels, state_event } => {
-            if title.is_none() && description.is_none() && labels.is_none() && state_event.is_none() { return Err(ApiError::bad_request("Issue proposal is empty")); }
-            if title.as_ref().is_some_and(|value| value.trim().is_empty() || value.len() > 255)
-                || description.as_ref().is_some_and(|value| value.len() > 64 * 1024)
-                || labels.as_ref().is_some_and(|items| items.len() > 50 || items.iter().any(|item| item.len() > 128))
-            { return Err(ApiError::bad_request("Invalid issue proposal")); }
+        ProposalDraft::UpdateIssue {
+            session_id,
+            title,
+            description,
+            labels,
+            state_event,
+        } => {
+            if title.is_none() && description.is_none() && labels.is_none() && state_event.is_none()
+            {
+                return Err(ApiError::bad_request("Issue proposal is empty"));
+            }
+            if title
+                .as_ref()
+                .is_some_and(|value| value.trim().is_empty() || value.len() > 255)
+                || description
+                    .as_ref()
+                    .is_some_and(|value| value.len() > 64 * 1024)
+                || labels.as_ref().is_some_and(|items| {
+                    items.len() > 50 || items.iter().any(|item| item.len() > 128)
+                })
+            {
+                return Err(ApiError::bad_request("Invalid issue proposal"));
+            }
             if let Some(labels) = labels.as_ref() {
                 let workflow_labels: Vec<&str> = labels
                     .iter()
@@ -2577,7 +2916,13 @@ async fn create_proposal(
             let original_labels = current
                 .get("labels")
                 .and_then(Value::as_array)
-                .map(|items| items.iter().filter_map(Value::as_str).map(str::to_owned).collect::<Vec<_>>())
+                .map(|items| {
+                    items
+                        .iter()
+                        .filter_map(Value::as_str)
+                        .map(str::to_owned)
+                        .collect::<Vec<_>>()
+                })
                 .unwrap_or_default();
             if labels.is_some()
                 && original_labels
@@ -2611,14 +2956,30 @@ async fn create_proposal(
             )
         }
         ProposalDraft::Comment { session_id, body } => {
-            if body.trim().is_empty() || body.len() > 32 * 1024 { return Err(ApiError::bad_request("Invalid comment proposal")); }
+            if body.trim().is_empty() || body.len() > 32 * 1024 {
+                return Err(ApiError::bad_request("Invalid comment proposal"));
+            }
             validate_session_id(session_id.as_deref())?;
             ("comment", json!({"body":body}), session_id)
         }
-        ProposalDraft::InlineReview { session_id, merge_request_iid, comments } => {
-            if merge_request_iid == 0 || comments.is_empty() || comments.len() > 50
-                || comments.iter().any(|comment| comment.path.is_empty() || comment.path.len() > 1024 || comment.line == 0 || comment.body.trim().is_empty() || comment.body.len() > 32 * 1024)
-            { return Err(ApiError::bad_request("Invalid inline review proposal")); }
+        ProposalDraft::InlineReview {
+            session_id,
+            merge_request_iid,
+            comments,
+        } => {
+            if merge_request_iid == 0
+                || comments.is_empty()
+                || comments.len() > 50
+                || comments.iter().any(|comment| {
+                    comment.path.is_empty()
+                        || comment.path.len() > 1024
+                        || comment.line == 0
+                        || comment.body.trim().is_empty()
+                        || comment.body.len() > 32 * 1024
+                })
+            {
+                return Err(ApiError::bad_request("Invalid inline review proposal"));
+            }
             validate_session_id(session_id.as_deref())?;
             let current = call_gitlab(
                 &context,
@@ -2640,15 +3001,24 @@ async fn create_proposal(
                 session_id,
             )
         }
-        ProposalDraft::DiscussionReply { session_id, merge_request_iid, discussion_id, body } => {
+        ProposalDraft::DiscussionReply {
+            session_id,
+            merge_request_iid,
+            discussion_id,
+            body,
+        } => {
             if merge_request_iid == 0
                 || discussion_id.is_empty()
                 || discussion_id.len() > 128
-                || !discussion_id.bytes().all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_'))
+                || !discussion_id
+                    .bytes()
+                    .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_'))
                 || body.trim().is_empty()
                 || body.len() > 32 * 1024
             {
-                return Err(ApiError::bad_request("Invalid merge request discussion reply"));
+                return Err(ApiError::bad_request(
+                    "Invalid merge request discussion reply",
+                ));
             }
             validate_session_id(session_id.as_deref())?;
             (
@@ -2690,7 +3060,8 @@ async fn create_proposal(
             .get("merge_request_iid")
             .and_then(Value::as_u64)
             .ok_or_else(|| ApiError::bad_request("Invalid merge request proposal"))?;
-        let tracked_mr = tracked_merge_request(&state, user.id(), &context, proposal.issue_iid).await?;
+        let tracked_mr =
+            tracked_merge_request(&state, user.id(), &context, proposal.issue_iid).await?;
         if tracked_mr.get("iid").and_then(Value::as_u64) != Some(requested_mr) {
             return Err(ApiError::bad_request(
                 "This proposal must target the merge request linked to this issue",
@@ -2712,7 +3083,10 @@ async fn create_proposal(
             ));
         }
     }
-    repository(&state)?.create_proposal(user.id(), &proposal).await.map_err(internal)?;
+    repository(&state)?
+        .create_proposal(user.id(), &proposal)
+        .await
+        .map_err(internal)?;
     Ok(Json(proposal))
 }
 
@@ -2771,7 +3145,10 @@ async fn rebind_proposal(
         .ok_or_else(|| ApiError::not_found("GitLab proposal not found"))?;
     let lock_key = format!(
         "{}:{}:{}:{}",
-        user.id(), proposal.workspace_path, proposal.project_path, proposal.issue_iid
+        user.id(),
+        proposal.workspace_path,
+        proposal.project_path,
+        proposal.issue_iid
     );
     let lock = ISSUE_WRITE_LOCKS
         .get_or_init(DashMap::new)
@@ -2785,7 +3162,9 @@ async fn rebind_proposal(
         .map_err(internal)?
         .ok_or_else(|| ApiError::not_found("GitLab proposal not found"))?;
     if !matches!(proposal.status.as_str(), "pending" | "approved") {
-        return Err(ApiError::conflict("Only an undecided GitLab proposal can be rebound"));
+        return Err(ApiError::conflict(
+            "Only an undecided GitLab proposal can be rebound",
+        ));
     }
     let session = state
         .sessions
@@ -2805,7 +3184,9 @@ async fn rebind_proposal(
         .await
         .map_err(internal)?
     {
-        return Err(ApiError::conflict("GitLab proposal changed while rebinding"));
+        return Err(ApiError::conflict(
+            "GitLab proposal changed while rebinding",
+        ));
     }
     let mut proposal = repository
         .proposal(user.id(), &proposal_id)
@@ -2833,11 +3214,17 @@ async fn approve_proposal(
 ) -> ApiResult<Json<Proposal>> {
     protected_submission(&state, peer, &headers)?;
     let repository = repository(&state)?;
-    let proposal = repository.proposal(user.id(), &proposal_id).await.map_err(internal)?
+    let proposal = repository
+        .proposal(user.id(), &proposal_id)
+        .await
+        .map_err(internal)?
         .ok_or_else(|| ApiError::not_found("GitLab proposal not found"))?;
     let write_lock_key = format!(
         "{}:{}:{}:{}",
-        user.id(), proposal.workspace_path, proposal.project_path, proposal.issue_iid
+        user.id(),
+        proposal.workspace_path,
+        proposal.project_path,
+        proposal.issue_iid
     );
     let write_lock = ISSUE_WRITE_LOCKS
         .get_or_init(DashMap::new)
@@ -2850,8 +3237,13 @@ async fn approve_proposal(
         .await
         .map_err(internal)?
         .ok_or_else(|| ApiError::not_found("GitLab proposal not found"))?;
-    let resuming_approved_review = proposal.kind == "inline_review" && proposal.status == "approved";
-    if proposal.status != "pending" && !resuming_approved_review { return Err(ApiError::bad_request("GitLab proposal is no longer pending")); }
+    let resuming_approved_review =
+        proposal.kind == "inline_review" && proposal.status == "approved";
+    if proposal.status != "pending" && !resuming_approved_review {
+        return Err(ApiError::bad_request(
+            "GitLab proposal is no longer pending",
+        ));
+    }
     if let Some(session_id) = proposal.session_id.as_deref() {
         let session = state
             .sessions
@@ -2889,7 +3281,13 @@ async fn approve_proposal(
         let mut labels: Vec<String> = issue
             .get("labels")
             .and_then(Value::as_array)
-            .map(|labels| labels.iter().filter_map(Value::as_str).map(str::to_owned).collect())
+            .map(|labels| {
+                labels
+                    .iter()
+                    .filter_map(Value::as_str)
+                    .map(str::to_owned)
+                    .collect()
+            })
             .unwrap_or_default();
         let existing_statuses = labels
             .iter()
@@ -2927,7 +3325,7 @@ async fn approve_proposal(
             .payload
             .get("merge_request_iid")
             .and_then(Value::as_u64)
-                .ok_or_else(|| ApiError::bad_request("Invalid merge request proposal"))?;
+            .ok_or_else(|| ApiError::bad_request("Invalid merge request proposal"))?;
         let tracked_mr =
             tracked_merge_request(&state, user.id(), &context, proposal.issue_iid).await?;
         if tracked_mr.get("iid").and_then(Value::as_u64) != Some(requested_mr) {
@@ -2937,70 +3335,74 @@ async fn approve_proposal(
         }
     }
     let prepared_issue_update = if proposal.kind == "update_issue" {
-        Some(
-            prepare_issue_update(
-                &context,
-                user.id(),
-                &proposal,
-                request.overwrite_stale,
-            )
-            .await?,
-        )
+        Some(prepare_issue_update(&context, user.id(), &proposal, request.overwrite_stale).await?)
     } else {
         None
     };
-    if !resuming_approved_review && !repository
-        .decide_proposal(user.id(), &proposal.id, "approved")
-        .await
-        .map_err(internal)?
+    if !resuming_approved_review
+        && !repository
+            .decide_proposal(user.id(), &proposal.id, "approved")
+            .await
+            .map_err(internal)?
     {
-        return Err(ApiError::conflict("GitLab proposal has already been decided"));
+        return Err(ApiError::conflict(
+            "GitLab proposal has already been decided",
+        ));
     }
     let applied = match proposal.kind.as_str() {
-        "start_implementation" => {
-            match start_labels {
-                Some(labels) => match call_gitlab(&context, user.id(), GitLabOperation::UpdateIssue {
-                        project_path: proposal.project_path.clone(),
-                        issue_iid: proposal.issue_iid,
-                        title: None,
-                        description: None,
-                        labels: Some(labels),
-                        state_event: None,
-                    }).await {
-                    Ok(_) => repository
-                        .start_implementation(
-                            user.id(),
-                            &proposal.workspace_path,
-                            &proposal.project_path,
-                            proposal.issue_iid,
-                            proposal.session_id.as_deref(),
-                        )
-                        .await
-                        .map(|_| Value::Null)
-                        .map_err(|_| {
-                            ApiError::service_unavailable(
-                                "Could not record implementation approval",
-                            )
-                        }),
-                    Err(error) => Err(error),
+        "start_implementation" => match start_labels {
+            Some(labels) => match call_gitlab(
+                &context,
+                user.id(),
+                GitLabOperation::UpdateIssue {
+                    project_path: proposal.project_path.clone(),
+                    issue_iid: proposal.issue_iid,
+                    title: None,
+                    description: None,
+                    labels: Some(labels),
+                    state_event: None,
                 },
-                None => Err(ApiError::internal(
-                    "Implementation approval lost its status-label proposal",
-                )),
-            }
-        }
-        "update_issue" => {
-            match prepared_issue_update {
-                Some(Some(operation)) => call_gitlab(&context, user.id(), operation).await,
-                Some(None) => Ok(json!({"unchanged": true})),
-                None => Err(ApiError::internal("Issue proposal lost its approved update")),
-            }
-        }
+            )
+            .await
+            {
+                Ok(_) => repository
+                    .start_implementation(
+                        user.id(),
+                        &proposal.workspace_path,
+                        &proposal.project_path,
+                        proposal.issue_iid,
+                        proposal.session_id.as_deref(),
+                    )
+                    .await
+                    .map(|_| Value::Null)
+                    .map_err(|_| {
+                        ApiError::service_unavailable("Could not record implementation approval")
+                    }),
+                Err(error) => Err(error),
+            },
+            None => Err(ApiError::internal(
+                "Implementation approval lost its status-label proposal",
+            )),
+        },
+        "update_issue" => match prepared_issue_update {
+            Some(Some(operation)) => call_gitlab(&context, user.id(), operation).await,
+            Some(None) => Ok(json!({"unchanged": true})),
+            None => Err(ApiError::internal(
+                "Issue proposal lost its approved update",
+            )),
+        },
         "comment" => {
             let body = value_string(&proposal.payload, "body").unwrap_or_default();
-            call_gitlab(&context, user.id(), GitLabOperation::CreateIssueNote {
-                project_path: proposal.project_path.clone(), issue_iid: proposal.issue_iid, body,
-            }).await
+            call_gitlab(
+                &context,
+                user.id(),
+                GitLabOperation::CreateIssueNote {
+                    project_path: proposal.project_path.clone(),
+                    issue_iid: proposal.issue_iid,
+                    body,
+                },
+            )
+            .await
         }
         "inline_review" => submit_inline_review(&context, user.id(), &proposal).await,
         "discussion_reply" => submit_discussion_reply(&context, user.id(), &proposal).await,
@@ -3045,7 +3447,11 @@ async fn approve_proposal(
     }
     let mut result = proposal;
     result.status = final_status.to_owned();
-    if applied.is_err() { return Err(ApiError::service_unavailable("GitLab proposal could not be applied")); }
+    if applied.is_err() {
+        return Err(ApiError::service_unavailable(
+            "GitLab proposal could not be applied",
+        ));
+    }
     Ok(Json(result))
 }
 
@@ -3057,8 +3463,13 @@ async fn reject_proposal(
     headers: HeaderMap,
 ) -> ApiResult<Json<Value>> {
     protected_submission(&state, peer, &headers)?;
-    let found = repository(&state)?.decide_proposal(user.id(), &proposal_id, "rejected").await.map_err(internal)?;
-    if !found { return Err(ApiError::not_found("Pending GitLab proposal not found")); }
+    let found = repository(&state)?
+        .decide_proposal(user.id(), &proposal_id, "rejected")
+        .await
+        .map_err(internal)?;
+    if !found {
+        return Err(ApiError::not_found("Pending GitLab proposal not found"));
+    }
     Ok(Json(json!({"rejected": true})))
 }
 
@@ -3089,10 +3500,9 @@ async fn prepare_issue_update(
         },
     )
     .await?;
-    let original = proposal
-        .payload
-        .get("original")
-        .ok_or_else(|| ApiError::conflict("This proposal has no original ticket snapshot; create a new proposal."))?;
+    let original = proposal.payload.get("original").ok_or_else(|| {
+        ApiError::conflict("This proposal has no original ticket snapshot; create a new proposal.")
+    })?;
     let confirmation_snapshot = proposal.payload.get("stale_snapshot");
     let mut changed_since_confirmation = confirmation_snapshot.is_none();
     let proposed_title = value_string(&proposal.payload, "title");
@@ -3101,7 +3511,13 @@ async fn prepare_issue_update(
         .payload
         .get("labels")
         .and_then(Value::as_array)
-        .map(|items| items.iter().filter_map(Value::as_str).map(str::to_owned).collect::<Vec<_>>());
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(Value::as_str)
+                .map(str::to_owned)
+                .collect::<Vec<_>>()
+        });
     if let Some(labels) = proposed_labels.as_ref() {
         let workflow_labels: Vec<&str> = labels
             .iter()
@@ -3118,28 +3534,56 @@ async fn prepare_issue_update(
         _ => None,
     };
 
-    let current_title = current.get("title").and_then(Value::as_str).unwrap_or_default();
+    let current_title = current
+        .get("title")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
     let current_description = current
         .get("description")
         .and_then(Value::as_str)
         .unwrap_or_default();
-    let current_state = current.get("state").and_then(Value::as_str).unwrap_or("opened");
-    let original_title = original.get("title").and_then(Value::as_str).unwrap_or_default();
+    let current_state = current
+        .get("state")
+        .and_then(Value::as_str)
+        .unwrap_or("opened");
+    let original_title = original
+        .get("title")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
     let original_description = original
         .get("description")
         .and_then(Value::as_str)
         .unwrap_or_default();
-    let original_state = original.get("state").and_then(Value::as_str).unwrap_or("opened");
+    let original_state = original
+        .get("state")
+        .and_then(Value::as_str)
+        .unwrap_or("opened");
     let current_labels = current
         .get("labels")
         .and_then(Value::as_array)
-        .map(|items| items.iter().filter_map(Value::as_str).map(str::to_owned).collect::<Vec<_>>())
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(Value::as_str)
+                .map(str::to_owned)
+                .collect::<Vec<_>>()
+        })
         .unwrap_or_default();
     let original_labels = original
         .get("labels")
         .and_then(Value::as_array)
-        .map(|items| items.iter().filter_map(Value::as_str).map(str::to_owned).collect::<Vec<_>>())
-        .ok_or_else(|| ApiError::conflict("This proposal has no original label snapshot; create a new proposal."))?;
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(Value::as_str)
+                .map(str::to_owned)
+                .collect::<Vec<_>>()
+        })
+        .ok_or_else(|| {
+            ApiError::conflict(
+                "This proposal has no original label snapshot; create a new proposal.",
+            )
+        })?;
 
     let status_labels = canonical_workflow_labels();
     let workflow_labels = |labels: &[String]| -> Vec<String> {
@@ -3172,7 +3616,9 @@ async fn prepare_issue_update(
         }
         stale_fields.push(format!(
             "title: original='{}', current='{}', proposed='{}'",
-            summarize(original_title), summarize(current_title), summarize(proposed)
+            summarize(original_title),
+            summarize(current_title),
+            summarize(proposed)
         ));
     }
     if let Some(proposed) = proposed_description.as_deref()
@@ -3188,7 +3634,9 @@ async fn prepare_issue_update(
         }
         stale_fields.push(format!(
             "description: original='{}', current='{}', proposed='{}'",
-            summarize(original_description), summarize(current_description), summarize(proposed)
+            summarize(original_description),
+            summarize(current_description),
+            summarize(proposed)
         ));
     }
 
@@ -3201,7 +3649,11 @@ async fn prepare_issue_update(
             .and_then(Value::as_array)
             .map(|items| {
                 workflow_labels(
-                    &items.iter().filter_map(Value::as_str).map(str::to_owned).collect::<Vec<_>>(),
+                    &items
+                        .iter()
+                        .filter_map(Value::as_str)
+                        .map(str::to_owned)
+                        .collect::<Vec<_>>(),
                 )
             });
         if snapshot_workflow.as_ref() != Some(&current_workflow) {
@@ -3249,13 +3701,7 @@ async fn prepare_issue_update(
         }
         if workflow_status_changed {
             merged_labels.retain(|label| !status_labels.contains(&label.as_str()));
-            merged_labels.extend(
-                proposed_workflow
-                    .as_ref()
-                    .into_iter()
-                    .flatten()
-                    .cloned(),
-            );
+            merged_labels.extend(proposed_workflow.as_ref().into_iter().flatten().cloned());
         }
         merged_labels.sort();
         merged_labels.dedup();
@@ -3295,7 +3741,9 @@ async fn prepare_issue_update(
             .await
             .map_err(internal)?
         {
-            return Err(ApiError::conflict("GitLab proposal changed while checking for stale fields; reload and review it again."));
+            return Err(ApiError::conflict(
+                "GitLab proposal changed while checking for stale fields; reload and review it again.",
+            ));
         }
         return Err(ApiError::conflict(format!(
             "GitLab ticket changed since this proposal. Review the current values before overwriting: {}. Confirm overwrite to continue.",
@@ -3326,9 +3774,9 @@ async fn prepare_issue_update(
 }
 
 fn validate_session_id(session_id: Option<&str>) -> ApiResult<()> {
-    if session_id.is_some_and(|id| {
-        id.is_empty() || id.len() > 128 || id.chars().any(char::is_control)
-    }) {
+    if session_id
+        .is_some_and(|id| id.is_empty() || id.len() > 128 || id.chars().any(char::is_control))
+    {
         return Err(ApiError::bad_request("Invalid session identifier"));
     }
     Ok(())
@@ -3361,7 +3809,10 @@ async fn create_or_update_draft(
         || request.title.trim().is_empty()
         || request.title.len() > 255
         || request.description.len() > 64 * 1024
-        || request.target_branch.as_ref().is_some_and(|branch| branch.len() > 255)
+        || request
+            .target_branch
+            .as_ref()
+            .is_some_and(|branch| branch.len() > 255)
     {
         return Err(ApiError::bad_request("Invalid draft merge request"));
     }
@@ -3423,10 +3874,12 @@ async fn create_draft_for_context(
         .await
         .map_err(internal)?
     {
-        return Err(ApiError::forbidden("Approve implementation before creating a draft merge request"));
+        return Err(ApiError::forbidden(
+            "Approve implementation before creating a draft merge request",
+        ));
     }
     let project = call_gitlab(
-        &context,
+        context,
         account_id,
         GitLabOperation::GetProject {
             project_path: context.mapping.project_path.clone(),
@@ -3437,7 +3890,9 @@ async fn create_draft_for_context(
         .get("default_branch")
         .and_then(Value::as_str)
         .filter(|branch| !branch.is_empty() && branch.len() <= 255)
-        .ok_or_else(|| ApiError::service_unavailable("GitLab project default branch is unavailable"))?
+        .ok_or_else(|| {
+            ApiError::service_unavailable("GitLab project default branch is unavailable")
+        })?
         .to_owned();
     let target_branch = requested_target_branch
         .map(str::trim)
@@ -3468,7 +3923,9 @@ async fn create_draft_for_context(
         )
         .await?;
         let Some(items) = response.as_array() else {
-            return Err(ApiError::service_unavailable("GitLab returned an invalid merge request list"));
+            return Err(ApiError::service_unavailable(
+                "GitLab returned an invalid merge request list",
+            ));
         };
         for item in items {
             if item
@@ -3505,7 +3962,9 @@ async fn create_draft_for_context(
             "This issue's linked merge request is closed. Oqto will not create a second merge request for the same issue.",
         ));
     }
-    if existing.as_ref().is_some_and(|item| item.get("draft").and_then(Value::as_bool) == Some(false))
+    if existing
+        .as_ref()
+        .is_some_and(|item| item.get("draft").and_then(Value::as_bool) == Some(false))
         && !confirm_redraft_ready
     {
         return Err(ApiError::conflict(
@@ -3536,13 +3995,18 @@ async fn create_draft_for_context(
         ));
     }
     let result = if let Some(existing) = existing {
-        let existing_branch = existing.get("source_branch").and_then(Value::as_str).unwrap_or_default();
+        let existing_branch = existing
+            .get("source_branch")
+            .and_then(Value::as_str)
+            .unwrap_or_default();
         if existing_branch != source_branch {
             return Err(ApiError::conflict(
                 "This issue's linked merge request uses a different source branch. Check out that branch manually before updating it; Oqto never switches branches.",
             ));
         }
-        let iid = existing.get("iid").and_then(Value::as_u64).ok_or_else(|| ApiError::service_unavailable("GitLab returned an invalid merge request"))?;
+        let iid = existing.get("iid").and_then(Value::as_u64).ok_or_else(|| {
+            ApiError::service_unavailable("GitLab returned an invalid merge request")
+        })?;
         let latest = call_gitlab(
             context,
             account_id,
@@ -3558,33 +4022,62 @@ async fn create_draft_for_context(
                 "The linked merge request was closed before the update could be applied",
             ));
         }
-        if latest.get("draft").and_then(Value::as_bool) == Some(false)
-            && !confirm_redraft_ready
-        {
+        if latest.get("draft").and_then(Value::as_bool) == Some(false) && !confirm_redraft_ready {
             return Err(ApiError::conflict(
                 "The linked merge request became ready. Confirm the ready-to-draft transition before updating it.",
             ));
         }
-        let updated = call_gitlab(context, account_id, GitLabOperation::UpdateMergeRequest {
-            project_path: context.mapping.project_path.clone(), merge_request_iid: iid,
-            title: title.to_owned(), description: linked_description, draft: true,
-            target_branch: update_target_branch,
-        }).await?;
+        let updated = call_gitlab(
+            context,
+            account_id,
+            GitLabOperation::UpdateMergeRequest {
+                project_path: context.mapping.project_path.clone(),
+                merge_request_iid: iid,
+                title: title.to_owned(),
+                description: linked_description,
+                draft: true,
+                target_branch: update_target_branch,
+            },
+        )
+        .await?;
         (iid, updated)
     } else {
-        if same_source_branch.iter().any(|(branch, _)| branch == &source_branch) {
+        if same_source_branch
+            .iter()
+            .any(|(branch, _)| branch == &source_branch)
+        {
             return Err(ApiError::conflict(
                 "A merge request already uses the current source branch but is not linked to this issue",
             ));
         }
-        let created = call_gitlab(context, account_id, GitLabOperation::CreateMergeRequest {
-            project_path: context.mapping.project_path.clone(), source_branch,
-            target_branch, title: title.to_owned(), description: linked_description, draft: true,
-        }).await?;
-        let iid = created.get("iid").and_then(Value::as_u64).ok_or_else(|| ApiError::service_unavailable("GitLab returned an invalid merge request"))?;
+        let created = call_gitlab(
+            context,
+            account_id,
+            GitLabOperation::CreateMergeRequest {
+                project_path: context.mapping.project_path.clone(),
+                source_branch,
+                target_branch,
+                title: title.to_owned(),
+                description: linked_description,
+                draft: true,
+            },
+        )
+        .await?;
+        let iid = created.get("iid").and_then(Value::as_u64).ok_or_else(|| {
+            ApiError::service_unavailable("GitLab returned an invalid merge request")
+        })?;
         (iid, created)
     };
-    repository.save_merge_request(account_id, &context.canonical_path, &context.mapping.project_path, issue_iid, result.0).await.map_err(internal)?;
+    repository
+        .save_merge_request(
+            account_id,
+            &context.canonical_path,
+            &context.mapping.project_path,
+            issue_iid,
+            result.0,
+        )
+        .await
+        .map_err(internal)?;
     Ok(result.1)
 }
 
@@ -3604,11 +4097,16 @@ async fn mark_merge_request_ready(
     Json(request): Json<ReadyRequest>,
 ) -> ApiResult<Json<Value>> {
     protected_submission(&state, peer, &headers)?;
-    if !request.confirmed { return Err(ApiError::bad_request("Explicit confirmation is required")); }
+    if !request.confirmed {
+        return Err(ApiError::bad_request("Explicit confirmation is required"));
+    }
     let context = workspace_gitlab(&state, user.id(), &request.workspace_path).await?;
     let lock_key = format!(
         "{}:{}:{}:{}",
-        user.id(), context.canonical_path, context.mapping.project_path, request.issue_iid
+        user.id(),
+        context.canonical_path,
+        context.mapping.project_path,
+        request.issue_iid
     );
     let lock = DRAFT_LOCKS
         .get_or_init(DashMap::new)
@@ -3616,19 +4114,46 @@ async fn mark_merge_request_ready(
         .or_insert_with(|| Arc::new(Mutex::new(())))
         .clone();
     let _draft_guard = lock.lock().await;
-    let merge_request = tracked_merge_request(&state, user.id(), &context, request.issue_iid).await?;
+    let merge_request =
+        tracked_merge_request(&state, user.id(), &context, request.issue_iid).await?;
     if merge_request.get("state").and_then(Value::as_str) != Some("opened") {
-        return Err(ApiError::conflict("The linked merge request is closed and cannot be marked ready"));
+        return Err(ApiError::conflict(
+            "The linked merge request is closed and cannot be marked ready",
+        ));
     }
     if merge_request.get("draft").and_then(Value::as_bool) == Some(false) {
-        return Err(ApiError::conflict("The linked merge request is already ready for review"));
+        return Err(ApiError::conflict(
+            "The linked merge request is already ready for review",
+        ));
     }
-    let title = merge_request.get("title").and_then(Value::as_str).unwrap_or_default().to_owned();
-    let description = merge_request.get("description").and_then(Value::as_str).unwrap_or_default().to_owned();
-    let iid = merge_request.get("iid").and_then(Value::as_u64).ok_or_else(|| ApiError::not_found("Draft merge request not found"))?;
-    call_gitlab(&context, user.id(), GitLabOperation::UpdateMergeRequest {
-        project_path: context.mapping.project_path.clone(), merge_request_iid: iid, title, description, draft: false, target_branch: None,
-    }).await.map(Json)
+    let title = merge_request
+        .get("title")
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .to_owned();
+    let description = merge_request
+        .get("description")
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .to_owned();
+    let iid = merge_request
+        .get("iid")
+        .and_then(Value::as_u64)
+        .ok_or_else(|| ApiError::not_found("Draft merge request not found"))?;
+    call_gitlab(
+        &context,
+        user.id(),
+        GitLabOperation::UpdateMergeRequest {
+            project_path: context.mapping.project_path.clone(),
+            merge_request_iid: iid,
+            title,
+            description,
+            draft: false,
+            target_branch: None,
+        },
+    )
+    .await
+    .map(Json)
 }
 
 async fn tracked_merge_request(
@@ -3642,17 +4167,29 @@ async fn tracked_merge_request(
         .bind(account_id).bind(&context.canonical_path).bind(&context.mapping.project_path).bind(i64::try_from(issue_iid).map_err(|_| ApiError::bad_request("Invalid issue IID"))?)
         .fetch_optional(repository.pool())
         .await.map_err(internal)?;
-    let iid = iid.flatten().ok_or_else(|| ApiError::not_found("Draft merge request not found"))?;
-    call_gitlab(context, account_id, GitLabOperation::GetMergeRequest {
-        project_path: context.mapping.project_path.clone(), merge_request_iid: u64::try_from(iid).map_err(|_| ApiError::internal("Invalid stored merge request IID"))?, include_changes: false,
-    }).await
+    let iid = iid
+        .flatten()
+        .ok_or_else(|| ApiError::not_found("Draft merge request not found"))?;
+    call_gitlab(
+        context,
+        account_id,
+        GitLabOperation::GetMergeRequest {
+            project_path: context.mapping.project_path.clone(),
+            merge_request_iid: u64::try_from(iid)
+                .map_err(|_| ApiError::internal("Invalid stored merge request IID"))?,
+            include_changes: false,
+        },
+    )
+    .await
 }
 
 fn has_closing_reference(description: &str, issue_iid: u64) -> bool {
     let Ok(expected) = i64::try_from(issue_iid) else {
         return false;
     };
-    let Ok(regex) = regex::Regex::new(r"(?i)\b(?:close[sd]?|fix(?:es|ed)?|resolve[sd]?)\s+#([1-9][0-9]{0,18})\b") else {
+    let Ok(regex) = regex::Regex::new(
+        r"(?i)\b(?:close[sd]?|fix(?:es|ed)?|resolve[sd]?)\s+#([1-9][0-9]{0,18})\b",
+    ) else {
         return false;
     };
     regex
@@ -3697,9 +4234,9 @@ async fn submit_inline_review(
         },
     )
     .await?;
-    let current_refs = current
-        .get("diff_refs")
-        .ok_or_else(|| ApiError::conflict("GitLab diff references are no longer available; refresh the review."))?;
+    let current_refs = current.get("diff_refs").ok_or_else(|| {
+        ApiError::conflict("GitLab diff references are no longer available; refresh the review.")
+    })?;
     if !same_diff_refs(expected_refs, current_refs) {
         return Err(ApiError::conflict(
             "The merge request diff changed after this review was proposed. Refresh the diff and create a new review proposal.",
@@ -3710,7 +4247,9 @@ async fn submit_inline_review(
             .get(key)
             .and_then(Value::as_str)
             .map(str::to_owned)
-            .ok_or_else(|| ApiError::conflict("GitLab diff references are incomplete; refresh the review."))
+            .ok_or_else(|| {
+                ApiError::conflict("GitLab diff references are incomplete; refresh the review.")
+            })
     };
     let changes = current
         .get("changes")
@@ -3719,13 +4258,26 @@ async fn submit_inline_review(
 
     let mut validated = Vec::with_capacity(comments.len());
     for (index, comment) in comments.iter().enumerate() {
-        let path = comment.get("path").and_then(Value::as_str).unwrap_or_default();
-        let line = comment.get("line").and_then(Value::as_u64).unwrap_or_default();
-        let body = comment.get("body").and_then(Value::as_str).unwrap_or_default();
+        let path = comment
+            .get("path")
+            .and_then(Value::as_str)
+            .unwrap_or_default();
+        let line = comment
+            .get("line")
+            .and_then(Value::as_u64)
+            .unwrap_or_default();
+        let body = comment
+            .get("body")
+            .and_then(Value::as_str)
+            .unwrap_or_default();
         let side = match comment.get("side").and_then(Value::as_str) {
             Some("old") => oqto_protocol::gitlab::GitLabDiscussionSide::Old,
             Some("new") => oqto_protocol::gitlab::GitLabDiscussionSide::New,
-            _ => return Err(ApiError::bad_request("Review comment has an invalid diff side")),
+            _ => {
+                return Err(ApiError::bad_request(
+                    "Review comment has an invalid diff side",
+                ));
+            }
         };
         let change = changes
             .iter()
@@ -3736,10 +4288,23 @@ async fn submit_inline_review(
                 };
                 change.get(expected_path).and_then(Value::as_str) == Some(path)
             })
-            .ok_or_else(|| ApiError::conflict("Review path is not present in the current diff; refresh the review."))?;
-        let old_path = change.get("old_path").and_then(Value::as_str).unwrap_or_default();
-        let new_path = change.get("new_path").and_then(Value::as_str).unwrap_or_default();
-        let diff = change.get("diff").and_then(Value::as_str).unwrap_or_default();
+            .ok_or_else(|| {
+                ApiError::conflict(
+                    "Review path is not present in the current diff; refresh the review.",
+                )
+            })?;
+        let old_path = change
+            .get("old_path")
+            .and_then(Value::as_str)
+            .unwrap_or_default();
+        let new_path = change
+            .get("new_path")
+            .and_then(Value::as_str)
+            .unwrap_or_default();
+        let diff = change
+            .get("diff")
+            .and_then(Value::as_str)
+            .unwrap_or_default();
         if !is_actual_diff_line(diff, side, line) {
             return Err(ApiError::conflict(
                 "Review line is not present on the selected side of the current diff; refresh the review.",
@@ -3791,7 +4356,9 @@ async fn submit_inline_review(
             .get("id")
             .and_then(Value::as_str)
             .filter(|value| !value.is_empty() && value.len() <= 128)
-            .ok_or_else(|| ApiError::service_unavailable("GitLab did not return the submitted discussion ID"))?;
+            .ok_or_else(|| {
+                ApiError::service_unavailable("GitLab did not return the submitted discussion ID")
+            })?;
         accepted.push(json!({"index":index,"discussion_id":discussion_id}));
         payload["submitted_discussions"] = Value::Array(accepted.clone());
         if !context
@@ -3810,9 +4377,9 @@ async fn submit_inline_review(
 }
 
 fn same_diff_refs(expected: &Value, current: &Value) -> bool {
-    ["base_sha", "start_sha", "head_sha"]
-        .iter()
-        .all(|key| expected.get(key).and_then(Value::as_str) == current.get(key).and_then(Value::as_str))
+    ["base_sha", "start_sha", "head_sha"].iter().all(|key| {
+        expected.get(key).and_then(Value::as_str) == current.get(key).and_then(Value::as_str)
+    })
 }
 
 fn is_actual_diff_line(
@@ -3826,8 +4393,12 @@ fn is_actual_diff_line(
             let mut ranges = line
                 .split_whitespace()
                 .filter(|part| part.starts_with('-') || part.starts_with('+'));
-            let Some(old_range) = ranges.next() else { continue; };
-            let Some(new_range) = ranges.next() else { continue; };
+            let Some(old_range) = ranges.next() else {
+                continue;
+            };
+            let Some(new_range) = ranges.next() else {
+                continue;
+            };
             old_line = parse_hunk_start(old_range);
             new_line = parse_hunk_start(new_range);
         } else if line.starts_with("+++") || line.starts_with("---") || line.starts_with('\\') {
@@ -3849,8 +4420,10 @@ fn is_actual_diff_line(
             }
             old_line = old_line.saturating_add(1);
         } else if line.starts_with(' ') {
-            if (side == oqto_protocol::gitlab::GitLabDiscussionSide::Old && old_line == requested_line)
-                || (side == oqto_protocol::gitlab::GitLabDiscussionSide::New && new_line == requested_line)
+            if (side == oqto_protocol::gitlab::GitLabDiscussionSide::Old
+                && old_line == requested_line)
+                || (side == oqto_protocol::gitlab::GitLabDiscussionSide::New
+                    && new_line == requested_line)
             {
                 return true;
             }
@@ -3863,7 +4436,7 @@ fn is_actual_diff_line(
 
 fn parse_hunk_start(range: &str) -> u64 {
     range
-        .trim_start_matches(|character| character == '-' || character == '+')
+        .trim_start_matches(['-', '+'])
         .split(',')
         .next()
         .and_then(|number| number.parse().ok())
@@ -3926,8 +4499,24 @@ mod tests {
     #[test]
     fn inbox_summary_is_compact_and_urls_must_match_configured_tls_host() {
         assert_eq!(summarize("  one\n  two  "), "one two");
-        assert_eq!(safe_web_url(Some("https://gitlab.example/group/project/-/issues/1"), "gitlab.example", "").as_deref(), Some("https://gitlab.example/group/project/-/issues/1"));
-        assert_eq!(safe_web_url(Some("https://gitlab.example/gitlab/group/project/-/issues/1"), "gitlab.example", "/gitlab").as_deref(), Some("https://gitlab.example/gitlab/group/project/-/issues/1"));
+        assert_eq!(
+            safe_web_url(
+                Some("https://gitlab.example/group/project/-/issues/1"),
+                "gitlab.example",
+                ""
+            )
+            .as_deref(),
+            Some("https://gitlab.example/group/project/-/issues/1")
+        );
+        assert_eq!(
+            safe_web_url(
+                Some("https://gitlab.example/gitlab/group/project/-/issues/1"),
+                "gitlab.example",
+                "/gitlab"
+            )
+            .as_deref(),
+            Some("https://gitlab.example/gitlab/group/project/-/issues/1")
+        );
         assert!(safe_web_url(Some("https://evil.example/"), "gitlab.example", "").is_none());
         assert!(safe_web_url(Some("http://gitlab.example/"), "gitlab.example", "").is_none());
         assert!(safe_web_url(Some("https://gitlab.example.evil/"), "gitlab.example", "").is_none());
@@ -3946,12 +4535,18 @@ mod tests {
     #[test]
     fn issue_status_and_closing_references_are_conservative() {
         assert_eq!(issue_status("opened", &[]), ("open".into(), false));
-        assert_eq!(issue_status("opened", &["oqto::ready".into()]), ("ready".into(), false));
+        assert_eq!(
+            issue_status("opened", &["oqto::ready".into()]),
+            ("ready".into(), false)
+        );
         assert_eq!(
             issue_status("opened", &["oqto::ready".into(), "oqto::blocked".into()]),
             ("open".into(), true)
         );
-        assert_eq!(issue_status("closed", &["oqto::ready".into()]), ("closed".into(), false));
+        assert_eq!(
+            issue_status("closed", &["oqto::ready".into()]),
+            ("closed".into(), false)
+        );
         assert!(has_closing_reference("Fixes #12", 12));
         assert!(has_closing_reference("Closes #12 and resolves #42", 42));
         assert!(!has_explicit_closes_reference("Fixes #12", 12));
@@ -3960,9 +4555,21 @@ mod tests {
 
     #[test]
     fn mentions_are_username_scoped_and_cursor_dates_are_parsed() {
-        assert!(contains_gitlab_mention("Please review @Alice's change", "alice"));
-        assert!(!contains_gitlab_mention("@alice2 is a different user", "alice"));
-        assert!(timestamp_at_or_after("2026-11-05T10:00:00Z", Some("2026-11-05T09:00:00Z")));
-        assert!(!timestamp_at_or_after("2026-11-05T08:00:00Z", Some("2026-11-05T09:00:00Z")));
+        assert!(contains_gitlab_mention(
+            "Please review @Alice's change",
+            "alice"
+        ));
+        assert!(!contains_gitlab_mention(
+            "@alice2 is a different user",
+            "alice"
+        ));
+        assert!(timestamp_at_or_after(
+            "2026-11-05T10:00:00Z",
+            Some("2026-11-05T09:00:00Z")
+        ));
+        assert!(!timestamp_at_or_after(
+            "2026-11-05T08:00:00Z",
+            Some("2026-11-05T09:00:00Z")
+        ));
     }
 }

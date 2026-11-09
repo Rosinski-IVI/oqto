@@ -407,7 +407,9 @@ fn personal_runner_client_for_user(
 async fn resolve_personal_runner(state: &AppState, user_id: &str) -> Result<Option<RunnerClient>> {
     let effective_user = state.effective_linux_username(user_id);
     let client = personal_runner_client(state, user_id)?;
-    Ok(Some(ensure_runner_healthy(state, &effective_user, client).await?))
+    Ok(Some(
+        ensure_runner_healthy(state, &effective_user, client).await?,
+    ))
 }
 
 pub async fn resolve_target_for_workspace_path(
@@ -512,12 +514,9 @@ mod tests {
 
     #[test]
     fn personal_runner_uses_configured_socket_without_user_isolation() {
-        let client = personal_runner_client_for_user(
-            "oqto",
-            false,
-            Some("/run/oqto/oqto-runner.sock"),
-        )
-        .unwrap();
+        let client =
+            personal_runner_client_for_user("oqto", false, Some("/run/oqto/oqto-runner.sock"))
+                .unwrap();
 
         assert_eq!(
             client.unix_socket_path(),

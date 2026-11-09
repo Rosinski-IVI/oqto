@@ -82,16 +82,15 @@ async fn execute_gitlab(
     use anyhow::Context;
     use oqto_credential_http::UseEvidence;
     static REQUESTS: tokio::sync::Semaphore = tokio::sync::Semaphore::const_new(8);
-    let _permit = REQUESTS
-        .try_acquire()
-        .context("GitLab request capacity")?;
+    let _permit = REQUESTS.try_acquire().context("GitLab request capacity")?;
     anyhow::ensure!(request.connection_revision > 0, "invalid GitLab revision");
     anyhow::ensure!(
         !request.audit_event_id.is_empty()
             && request.audit_event_id.len() <= 128
-            && request.audit_event_id.bytes().all(|byte| {
-                byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-' | b'.')
-            }),
+            && request
+                .audit_event_id
+                .bytes()
+                .all(|byte| { byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-' | b'.') }),
         "invalid GitLab audit identity"
     );
     let event = format!("{}.dispatch", request.audit_event_id);
@@ -133,9 +132,11 @@ async fn execute_gitlab(
         account: request.account_id.clone(),
         secret,
     };
-    Ok(oqto_credential_http::gitlab_json(&authority, lease, request)
-        .await?
-        .json)
+    Ok(
+        oqto_credential_http::gitlab_json(&authority, lease, request)
+            .await?
+            .json,
+    )
 }
 
 async fn execute(

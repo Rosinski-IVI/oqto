@@ -521,18 +521,24 @@ impl PiTranslator {
     // -- Extension UI events --
 
     fn on_extension_ui(&mut self, req: &ExtensionUiRequest) -> Vec<EventPayload> {
-        if req.method == "input"
-            && req.title.as_deref() == Some("OQTO_GITLAB_RPC_V1")
-        {
+        if req.method == "input" && req.title.as_deref() == Some("OQTO_GITLAB_RPC_V1") {
             let (request, error) = match req.placeholder.as_deref() {
                 Some(payload) if payload.len() <= 128 * 1024 => {
-                    match serde_json::from_str::<oqto_protocol::gitlab::GitLabAgentRpcRequest>(payload) {
+                    match serde_json::from_str::<oqto_protocol::gitlab::GitLabAgentRpcRequest>(
+                        payload,
+                    ) {
                         Ok(request) => (Some(request), None),
                         Err(_) => (None, Some("GitLab RPC request is invalid".to_owned())),
                     }
                 }
-                Some(_) => (None, Some("GitLab RPC request exceeds the size limit".to_owned())),
-                None => (None, Some("GitLab RPC request payload is missing".to_owned())),
+                Some(_) => (
+                    None,
+                    Some("GitLab RPC request exceeds the size limit".to_owned()),
+                ),
+                None => (
+                    None,
+                    Some("GitLab RPC request payload is missing".to_owned()),
+                ),
             };
             return vec![EventPayload::GitLabAgentRpc {
                 ui_request_id: req.id.clone(),

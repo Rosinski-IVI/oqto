@@ -41,6 +41,7 @@ pub mod credentials;
 mod db;
 mod eavs;
 mod feedback;
+mod gitlab;
 mod history;
 mod identity;
 mod invite;
@@ -3040,11 +3041,9 @@ async fn handle_serve(ctx: &RuntimeContext, cmd: ServeCommand) -> Result<()> {
     // internal services, containers) must use /api/* paths.
     let admin_state = state.clone();
     let gitlab_shutdown = tokio_util::sync::CancellationToken::new();
-    let gitlab_poller = api::handlers::start_gitlab_background_polling(
-        state.clone(),
-        gitlab_shutdown.clone(),
-    )
-    .context("starting GitLab poll service")?;
+    let gitlab_poller =
+        api::handlers::start_gitlab_background_polling(state.clone(), gitlab_shutdown.clone())
+            .context("starting GitLab poll service")?;
     let api_router = api::create_router_with_config(state, ctx.config.server.max_upload_size_mb);
     let app = with_frontend_static_if_available(api_router);
 

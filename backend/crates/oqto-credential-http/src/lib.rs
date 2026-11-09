@@ -270,8 +270,7 @@ async fn read_json_limited(
     if secret.is_empty() {
         return Err(Error::Credential);
     }
-    if !response.status().is_success()
-        || response.content_length().is_some_and(|n| n > cap as u64)
+    if !response.status().is_success() || response.content_length().is_some_and(|n| n > cap as u64)
     {
         return Err(Error::Output);
     }

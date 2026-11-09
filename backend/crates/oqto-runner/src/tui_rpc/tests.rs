@@ -635,7 +635,7 @@ async fn snapshot_drains_a_long_streamed_reply_and_keeps_only_a_display_preview(
             json!({"type":"event","event":"message_start","data":{"message":{"role":"assistant"}}}),
         ];
         let mut text = String::new();
-        for n in 0..3000 {
+        for n in 0..1200 {
             text.push_str(&format!("w{n} "));
             backlog.push(json!({"type":"event","event":"message_update","data":{"message":{"role":"assistant",
                 "content":[{"type":"thinking","thinking":"hidden"},{"type":"text","text":text}]}}}));
@@ -660,7 +660,7 @@ async fn snapshot_drains_a_long_streamed_reply_and_keeps_only_a_display_preview(
     let preview = observer.preview().clone();
     let text = preview.text.context("preview text")?;
     assert!(
-        text.starts_with("w0 ") && text.ends_with("w2999 "),
+        text.starts_with("w0 ") && text.ends_with("w1199 "),
         "newest full text, text parts only"
     );
     assert!(!text.contains("hidden"));

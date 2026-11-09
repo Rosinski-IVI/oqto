@@ -21,7 +21,7 @@ use dashmap::DashMap;
 use futures::{SinkExt, StreamExt};
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::{Value, json};
 use tokio::sync::{Mutex, OnceCell, Semaphore, mpsc, oneshot};
 use tracing::{debug, error, info, warn};
 
@@ -2338,7 +2338,9 @@ async fn forward_pi_events(
                     {
                         seen_event_ids.remove(&expired);
                     }
-                    if let Some((ui_request_id, rpc_request, rpc_error)) = gitlab_rpc_input(&canonical_event) {
+                    if let Some((ui_request_id, rpc_request, rpc_error)) =
+                        gitlab_rpc_input(&canonical_event)
+                    {
                         GITLAB_RPC_REQUESTS
                             .retain(|_, (_, created)| created.elapsed() < Duration::from_secs(600));
                         let key = format!("{session_id}:{ui_request_id}");
@@ -3074,7 +3076,9 @@ mod tests {
                 error: None,
             },
         };
-        let (ui_request_id, Some(request), None) = gitlab_rpc_input(&event).expect("GitLab RPC marker") else {
+        let (ui_request_id, Some(request), None) =
+            gitlab_rpc_input(&event).expect("GitLab RPC marker")
+        else {
             panic!("expected a valid GitLab RPC request");
         };
         assert_eq!(ui_request_id, "pi-ui-1");
@@ -3088,7 +3092,10 @@ mod tests {
             },
             ..event
         };
-        assert!(matches!(gitlab_rpc_input(&forged), Some((_, None, Some(_)))));
+        assert!(matches!(
+            gitlab_rpc_input(&forged),
+            Some((_, None, Some(_)))
+        ));
     }
 
     #[test]

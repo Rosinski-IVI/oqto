@@ -25,20 +25,38 @@ pub fn normalize_instance_url(input: &str) -> Result<(String, String)> {
         .unwrap_or(after_scheme.len());
     let raw_suffix = &after_scheme[authority_end..];
     let raw_authority = &after_scheme[..authority_end];
-    ensure!(!raw_authority.contains('@'), "GitLab URL credentials are not allowed");
+    ensure!(
+        !raw_authority.contains('@'),
+        "GitLab URL credentials are not allowed"
+    );
     let raw_path = raw_suffix
         .split(['?', '#'])
         .next()
         .filter(|path| !path.is_empty())
         .unwrap_or("/");
-    ensure!(!raw_path.contains('%'), "encoded GitLab URL path segments are unsupported");
+    ensure!(
+        !raw_path.contains('%'),
+        "encoded GitLab URL path segments are unsupported"
+    );
     normalize_path_prefix(raw_path)?;
     let url = Url::parse(input).context("GitLab URL must be an HTTPS origin")?;
     ensure!(url.scheme() == "https", "GitLab requires HTTPS");
-    ensure!(url.username().is_empty() && url.password().is_none(), "GitLab URL credentials are not allowed");
-    ensure!(url.query().is_none() && url.fragment().is_none(), "GitLab URL query/fragment is not allowed");
-    ensure!(url.port_or_known_default() == Some(443), "GitLab must use TLS port 443");
-    let host = url.host_str().context("GitLab host is required")?.to_ascii_lowercase();
+    ensure!(
+        url.username().is_empty() && url.password().is_none(),
+        "GitLab URL credentials are not allowed"
+    );
+    ensure!(
+        url.query().is_none() && url.fragment().is_none(),
+        "GitLab URL query/fragment is not allowed"
+    );
+    ensure!(
+        url.port_or_known_default() == Some(443),
+        "GitLab must use TLS port 443"
+    );
+    let host = url
+        .host_str()
+        .context("GitLab host is required")?
+        .to_ascii_lowercase();
     validate_instance_host(&host)?;
     let path_prefix = normalize_path_prefix(url.path())?;
     Ok((host, path_prefix))
@@ -48,54 +66,88 @@ pub fn normalize_path_prefix(path: &str) -> Result<String> {
     if path == "/" {
         return Ok(String::new());
     }
-    ensure!(path.starts_with('/') && !path.contains("//") && path.len() <= 1024, "invalid GitLab URL path prefix");
+    ensure!(
+        path.starts_with('/') && !path.contains("//") && path.len() <= 1024,
+        "invalid GitLab URL path prefix"
+    );
     let trimmed = path.trim_end_matches('/');
     ensure!(!trimmed.is_empty(), "invalid GitLab URL path prefix");
-    ensure!(trimmed.split('/').skip(1).all(|part| {
-        !part.is_empty()
-            && !matches!(part, "." | "..")
-            && part.bytes().all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.' | b'~'))
-    }), "invalid GitLab URL path prefix");
+    ensure!(
+        trimmed.split('/').skip(1).all(|part| {
+            !part.is_empty()
+                && !matches!(part, "." | "..")
+                && part.bytes().all(|byte| {
+                    byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.' | b'~')
+                })
+        }),
+        "invalid GitLab URL path prefix"
+    );
     Ok(trimmed.to_owned())
 }
 
 fn validate_instance_host(host: &str) -> Result<()> {
-    ensure!(host.len() <= 253 && host.contains('.') && host == host.to_ascii_lowercase(), "invalid GitLab DNS host");
-    ensure!(host.parse::<std::net::IpAddr>().is_err(), "GitLab IP literals are unsupported");
-    ensure!(host.split('.').all(|label| {
-        !label.is_empty()
-            && label.len() <= 63
-            && !label.starts_with('-')
-            && !label.ends_with('-')
-            && label.bytes().all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'-')
-    }), "invalid GitLab DNS host");
+    ensure!(
+        host.len() <= 253 && host.contains('.') && host == host.to_ascii_lowercase(),
+        "invalid GitLab DNS host"
+    );
+    ensure!(
+        host.parse::<std::net::IpAddr>().is_err(),
+        "GitLab IP literals are unsupported"
+    );
+    ensure!(
+        host.split('.').all(|label| {
+            !label.is_empty()
+                && label.len() <= 63
+                && !label.starts_with('-')
+                && !label.ends_with('-')
+                && label
+                    .bytes()
+                    .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'-')
+        }),
+        "invalid GitLab DNS host"
+    );
     Ok(())
 }
 
 pub fn validate_project_path(project: &str) -> Result<()> {
-    ensure!(!project.is_empty() && project.len() <= 512 && !project.starts_with('/') && !project.ends_with('/'), "invalid GitLab project path");
-    ensure!(project.split('/').all(|part| {
-        !part.is_empty()
-            && !matches!(part, "." | "..")
-            && part.len() <= 128
-            && part.bytes().all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.'))
-    }), "invalid GitLab project path");
+    ensure!(
+        !project.is_empty()
+            && project.len() <= 512
+            && !project.starts_with('/')
+            && !project.ends_with('/'),
+        "invalid GitLab project path"
+    );
+    ensure!(
+        project.split('/').all(|part| {
+            !part.is_empty()
+                && !matches!(part, "." | "..")
+                && part.len() <= 128
+                && part
+                    .bytes()
+                    .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.'))
+        }),
+        "invalid GitLab project path"
+    );
     Ok(())
 }
 
 /// Map an HTTPS/SSH Git remote to a configured GitLab project. Credentials in
 /// a remote URL are ignored and never persisted. The remote host must match
 /// the one configured instance exactly.
-pub fn project_from_remote(remote: &str, configured_host: &str, path_prefix: &str) -> Result<String> {
+pub fn project_from_remote(
+    remote: &str,
+    configured_host: &str,
+    path_prefix: &str,
+) -> Result<String> {
     validate_instance_host(configured_host)?;
     normalize_path_prefix(path_prefix)?;
     let (host, raw_path, ssh_remote) = if let Some(rest) = remote.strip_prefix("git@") {
-        let (host, path) = rest.split_once(':').context("invalid scp-style Git remote")?;
+        let (host, path) = rest
+            .split_once(':')
+            .context("invalid scp-style Git remote")?;
         (host.to_owned(), path.to_owned(), true)
     } else {
-        let (_, after_scheme) = remote
-            .split_once("://")
-            .context("invalid Git remote URL")?;
+        let (_, after_scheme) = remote.split_once("://").context("invalid Git remote URL")?;
         let authority_end = after_scheme
             .find(['/', '?', '#'])
             .unwrap_or(after_scheme.len());
@@ -110,23 +162,41 @@ pub fn project_from_remote(remote: &str, configured_host: &str, path_prefix: &st
             .split('/')
             .filter(|segment| !segment.is_empty())
         {
-            ensure!(!matches!(segment, "." | ".."), "Git remote path traversal is unsupported");
+            ensure!(
+                !matches!(segment, "." | ".."),
+                "Git remote path traversal is unsupported"
+            );
         }
         let url = Url::parse(remote).context("invalid Git remote URL")?;
-        ensure!(matches!(url.scheme(), "https" | "ssh"), "unsupported Git remote scheme");
-        ensure!(url.query().is_none() && url.fragment().is_none(), "Git remote query/fragment is unsupported");
+        ensure!(
+            matches!(url.scheme(), "https" | "ssh"),
+            "unsupported Git remote scheme"
+        );
+        ensure!(
+            url.query().is_none() && url.fragment().is_none(),
+            "Git remote query/fragment is unsupported"
+        );
         let host = url.host_str().context("Git remote host is required")?;
         let ssh_remote = url.scheme() == "ssh";
         if url.scheme() == "https" {
-            ensure!(url.port_or_known_default() == Some(443), "Git remote must use standard HTTPS port");
+            ensure!(
+                url.port_or_known_default() == Some(443),
+                "Git remote must use standard HTTPS port"
+            );
         }
         (
             host.to_owned(),
-            url.path().strip_prefix('/').context("invalid Git remote path")?.to_owned(),
+            url.path()
+                .strip_prefix('/')
+                .context("invalid Git remote path")?
+                .to_owned(),
             ssh_remote,
         )
     };
-    ensure!(host.eq_ignore_ascii_case(configured_host), "Git remote does not match configured GitLab host");
+    ensure!(
+        host.eq_ignore_ascii_case(configured_host),
+        "Git remote does not match configured GitLab host"
+    );
     let prefix = path_prefix.trim_start_matches('/');
     let relative_path = if prefix.is_empty() {
         raw_path.as_str()
@@ -275,8 +345,8 @@ pub struct GitLabRepository {
 }
 
 fn merge_categories(existing_json: &str, incoming: &[String]) -> Result<Vec<String>> {
-    let mut categories: Vec<String> = serde_json::from_str(existing_json)
-        .context("decode persisted GitLab event categories")?;
+    let mut categories: Vec<String> =
+        serde_json::from_str(existing_json).context("decode persisted GitLab event categories")?;
     for category in incoming {
         if !categories.iter().any(|current| current == category) {
             categories.push(category.clone());
@@ -331,7 +401,11 @@ impl GitLabRepository {
         categories: &[String],
     ) -> Result<GitLabConnection> {
         let categories_json = serde_json::to_string(categories)?;
-        let mut transaction = self.pool.begin().await.context("begin GitLab connection update")?;
+        let mut transaction = self
+            .pool
+            .begin()
+            .await
+            .context("begin GitLab connection update")?;
         let previous = sqlx::query_as::<_, (String, String)>(
             "SELECT host,path_prefix FROM gitlab_connections WHERE account_id=?",
         )
@@ -339,9 +413,12 @@ impl GitLabRepository {
         .fetch_optional(&mut *transaction)
         .await
         .context("read previous GitLab instance")?;
-        if previous.as_ref().is_some_and(|(previous_host, previous_prefix)| {
-            previous_host != host || previous_prefix != path_prefix
-        }) {
+        if previous
+            .as_ref()
+            .is_some_and(|(previous_host, previous_prefix)| {
+                previous_host != host || previous_prefix != path_prefix
+            })
+        {
             for table in [
                 "gitlab_project_mappings",
                 "gitlab_poll_cursors",
@@ -370,20 +447,25 @@ impl GitLabRepository {
         .execute(&mut *transaction)
         .await
         .context("save GitLab connection")?;
-        transaction.commit().await.context("commit GitLab connection update")?;
+        transaction
+            .commit()
+            .await
+            .context("commit GitLab connection update")?;
         self.connection(account_id)
             .await?
             .context("saved GitLab connection missing")
     }
 
     pub async fn delete_connection(&self, account_id: &str) -> Result<bool> {
-        Ok(sqlx::query("DELETE FROM gitlab_connections WHERE account_id=?")
-            .bind(account_id)
-            .execute(&self.pool)
-            .await
-            .context("delete GitLab connection")?
-            .rows_affected()
-            == 1)
+        Ok(
+            sqlx::query("DELETE FROM gitlab_connections WHERE account_id=?")
+                .bind(account_id)
+                .execute(&self.pool)
+                .await
+                .context("delete GitLab connection")?
+                .rows_affected()
+                == 1,
+        )
     }
 
     pub async fn mark_connection_tested(
@@ -443,8 +525,15 @@ impl GitLabRepository {
         project_path: &str,
         source: &str,
     ) -> Result<ProjectMapping> {
-        ensure!(matches!(source, "remote" | "override"), "invalid mapping source");
-        let mut transaction = self.pool.begin().await.context("begin GitLab project mapping update")?;
+        ensure!(
+            matches!(source, "remote" | "override"),
+            "invalid mapping source"
+        );
+        let mut transaction = self
+            .pool
+            .begin()
+            .await
+            .context("begin GitLab project mapping update")?;
         let previous_project = sqlx::query_scalar::<_, String>(
             "SELECT project_path FROM gitlab_project_mappings WHERE account_id=? AND workspace_path=?",
         )
@@ -453,8 +542,17 @@ impl GitLabRepository {
         .fetch_optional(&mut *transaction)
         .await
         .context("read previous GitLab project mapping")?;
-        if previous_project.as_deref().is_some_and(|previous| previous != project_path) {
-            for table in ["gitlab_poll_cursors", "gitlab_inbox_events", "gitlab_workflows", "gitlab_session_selections", "gitlab_proposals"] {
+        if previous_project
+            .as_deref()
+            .is_some_and(|previous| previous != project_path)
+        {
+            for table in [
+                "gitlab_poll_cursors",
+                "gitlab_inbox_events",
+                "gitlab_workflows",
+                "gitlab_session_selections",
+                "gitlab_proposals",
+            ] {
                 let query = format!("DELETE FROM {table} WHERE account_id=? AND workspace_path=?");
                 sqlx::query(&query)
                     .bind(account_id)
@@ -474,7 +572,10 @@ impl GitLabRepository {
         .execute(&mut *transaction)
         .await
         .context("save GitLab project mapping")?;
-        transaction.commit().await.context("commit GitLab project mapping")?;
+        transaction
+            .commit()
+            .await
+            .context("commit GitLab project mapping")?;
         Ok(ProjectMapping {
             workspace_path: workspace_path.to_owned(),
             project_path: project_path.to_owned(),
@@ -501,8 +602,18 @@ impl GitLabRepository {
     }
 
     pub async fn delete_mapping(&self, account_id: &str, workspace_path: &str) -> Result<bool> {
-        let mut transaction = self.pool.begin().await.context("begin GitLab mapping removal")?;
-        for table in ["gitlab_poll_cursors", "gitlab_inbox_events", "gitlab_workflows", "gitlab_session_selections", "gitlab_proposals"] {
+        let mut transaction = self
+            .pool
+            .begin()
+            .await
+            .context("begin GitLab mapping removal")?;
+        for table in [
+            "gitlab_poll_cursors",
+            "gitlab_inbox_events",
+            "gitlab_workflows",
+            "gitlab_session_selections",
+            "gitlab_proposals",
+        ] {
             let query = format!("DELETE FROM {table} WHERE account_id=? AND workspace_path=?");
             sqlx::query(&query)
                 .bind(account_id)
@@ -511,14 +622,20 @@ impl GitLabRepository {
                 .await
                 .context("clear removed GitLab mapping state")?;
         }
-        let deleted = sqlx::query("DELETE FROM gitlab_project_mappings WHERE account_id=? AND workspace_path=?")
-            .bind(account_id)
-            .bind(workspace_path)
-            .execute(&mut *transaction)
+        let deleted = sqlx::query(
+            "DELETE FROM gitlab_project_mappings WHERE account_id=? AND workspace_path=?",
+        )
+        .bind(account_id)
+        .bind(workspace_path)
+        .execute(&mut *transaction)
+        .await
+        .context("remove GitLab project mapping")?
+        .rows_affected()
+            == 1;
+        transaction
+            .commit()
             .await
-            .context("remove GitLab project mapping")?
-            .rows_affected() == 1;
-        transaction.commit().await.context("commit GitLab mapping removal")?;
+            .context("commit GitLab mapping removal")?;
         Ok(deleted)
     }
 
@@ -570,7 +687,11 @@ impl GitLabRepository {
         event: &InboxEvent,
         event_key: &str,
     ) -> Result<bool> {
-        let mut transaction = self.pool.begin().await.context("begin GitLab inbox update")?;
+        let mut transaction = self
+            .pool
+            .begin()
+            .await
+            .context("begin GitLab inbox update")?;
         let exact = sqlx::query_as::<_, (String, String)>(
             "SELECT id,categories_json FROM gitlab_inbox_events WHERE account_id=? AND event_key=?",
         )
@@ -591,7 +712,10 @@ impl GitLabRepository {
                 .execute(&mut *transaction)
                 .await
                 .context("merge GitLab event categories")?;
-            transaction.commit().await.context("commit GitLab event category merge")?;
+            transaction
+                .commit()
+                .await
+                .context("commit GitLab event category merge")?;
             return Ok(false);
         }
 
@@ -616,7 +740,7 @@ impl GitLabRepository {
                     .bind(categories.first().map(String::as_str).unwrap_or(&event.category))
                     .bind(serde_json::to_string(&categories)?)
                     .bind(&event.entity_kind)
-                    .bind(i64::try_from(event.entity_iid).context("GitLab event IID overflow")?)
+                    .bind(event.entity_iid)
                     .bind(event.related_issue_iid)
                     .bind(&event.discussion_id)
                     .bind(&event.session_id)
@@ -629,7 +753,10 @@ impl GitLabRepository {
                     .execute(&mut *transaction)
                     .await
                     .context("coalesce unread GitLab event")?;
-                transaction.commit().await.context("commit GitLab event coalesce")?;
+                transaction
+                    .commit()
+                    .await
+                    .context("commit GitLab event coalesce")?;
                 return Ok(false);
             }
         }
@@ -646,7 +773,7 @@ impl GitLabRepository {
         .bind(serde_json::to_string(&event.categories)?)
         .bind(&event.coalesce_key)
         .bind(&event.entity_kind)
-        .bind(i64::try_from(event.entity_iid).context("GitLab event IID overflow")?)
+        .bind(event.entity_iid)
         .bind(event.related_issue_iid)
         .bind(&event.discussion_id)
         .bind(&event.session_id)
@@ -657,23 +784,35 @@ impl GitLabRepository {
         .execute(&mut *transaction)
         .await
         .context("record GitLab inbox event")?;
-        transaction.commit().await.context("commit GitLab inbox event")?;
+        transaction
+            .commit()
+            .await
+            .context("commit GitLab inbox event")?;
         Ok(true)
     }
 
     pub async fn expire_and_prune(&self) -> Result<(u64, u64)> {
-        let mut transaction = self.pool.begin().await.context("begin GitLab retention cleanup")?;
+        let mut transaction = self
+            .pool
+            .begin()
+            .await
+            .context("begin GitLab retention cleanup")?;
         let expired = sqlx::query("UPDATE gitlab_proposals SET status='expired',decided_at=datetime('now') WHERE status='pending' AND created_at<=datetime('now','-30 days')")
             .execute(&mut *transaction)
             .await
             .context("expire old GitLab proposals")?
             .rows_affected();
-        let removed = sqlx::query("DELETE FROM gitlab_inbox_events WHERE created_at<=datetime('now','-90 days')")
-            .execute(&mut *transaction)
+        let removed = sqlx::query(
+            "DELETE FROM gitlab_inbox_events WHERE created_at<=datetime('now','-90 days')",
+        )
+        .execute(&mut *transaction)
+        .await
+        .context("prune old GitLab inbox events")?
+        .rows_affected();
+        transaction
+            .commit()
             .await
-            .context("prune old GitLab inbox events")?
-            .rows_affected();
-        transaction.commit().await.context("commit GitLab retention cleanup")?;
+            .context("commit GitLab retention cleanup")?;
         Ok((expired, removed))
     }
 
@@ -742,7 +881,11 @@ impl GitLabRepository {
         account_id: &str,
         event_id: &str,
     ) -> Result<Option<String>> {
-        let mut transaction = self.pool.begin().await.context("begin GitLab read update")?;
+        let mut transaction = self
+            .pool
+            .begin()
+            .await
+            .context("begin GitLab read update")?;
         let workspace_path = sqlx::query_scalar::<_, String>(
             "SELECT workspace_path FROM gitlab_inbox_events WHERE account_id=? AND id=?",
         )
@@ -752,7 +895,10 @@ impl GitLabRepository {
         .await
         .context("find owned GitLab event")?;
         let Some(workspace_path) = workspace_path else {
-            transaction.rollback().await.context("rollback missing GitLab event read")?;
+            transaction
+                .rollback()
+                .await
+                .context("rollback missing GitLab event read")?;
             return Ok(None);
         };
         sqlx::query("UPDATE gitlab_inbox_events SET read_at=COALESCE(read_at,datetime('now')) WHERE account_id=? AND id=?")
@@ -761,7 +907,10 @@ impl GitLabRepository {
             .execute(&mut *transaction)
             .await
             .context("mark GitLab event read")?;
-        transaction.commit().await.context("commit GitLab read update")?;
+        transaction
+            .commit()
+            .await
+            .context("commit GitLab read update")?;
         Ok(Some(workspace_path))
     }
 
@@ -792,11 +941,7 @@ impl GitLabRepository {
         .context("list GitLab poll targets")
     }
 
-    pub async fn create_proposal(
-        &self,
-        account_id: &str,
-        proposal: &Proposal,
-    ) -> Result<()> {
+    pub async fn create_proposal(&self, account_id: &str, proposal: &Proposal) -> Result<()> {
         sqlx::query(
             "INSERT INTO gitlab_proposals(id,account_id,workspace_path,project_path,issue_iid,session_id,kind,payload_json,status) VALUES(?,?,?,?,?,?,?,?,'pending')",
         )
@@ -814,11 +959,7 @@ impl GitLabRepository {
         Ok(())
     }
 
-    pub async fn proposals(
-        &self,
-        account_id: &str,
-        workspace_path: &str,
-    ) -> Result<Vec<Proposal>> {
+    pub async fn proposals(&self, account_id: &str, workspace_path: &str) -> Result<Vec<Proposal>> {
         #[derive(FromRow)]
         struct Row {
             id: String,
@@ -884,13 +1025,11 @@ impl GitLabRepository {
         .transpose()
     }
 
-    pub async fn decide_proposal(
-        &self,
-        account_id: &str,
-        id: &str,
-        status: &str,
-    ) -> Result<bool> {
-        ensure!(matches!(status, "approved" | "rejected" | "applied" | "failed"), "invalid proposal state");
+    pub async fn decide_proposal(&self, account_id: &str, id: &str, status: &str) -> Result<bool> {
+        ensure!(
+            matches!(status, "approved" | "rejected" | "applied" | "failed"),
+            "invalid proposal state"
+        );
         let expected = if matches!(status, "applied" | "failed") {
             "approved"
         } else {
@@ -1033,7 +1172,11 @@ impl GitLabRepository {
         .await
         .context("load selected GitLab issue for session")?;
         row.map(|(workspace, project, issue)| {
-            Ok((workspace, project, u64::try_from(issue).context("invalid selected GitLab issue IID")?))
+            Ok((
+                workspace,
+                project,
+                u64::try_from(issue).context("invalid selected GitLab issue IID")?,
+            ))
         })
         .transpose()
     }
@@ -1064,7 +1207,10 @@ mod tests {
             "https://gitlab.example/a//b",
             "https://gitlab.example/a?query=1",
         ] {
-            assert!(normalize_instance_url(unsafe_path).is_err(), "{unsafe_path}");
+            assert!(
+                normalize_instance_url(unsafe_path).is_err(),
+                "{unsafe_path}"
+            );
         }
     }
 
@@ -1094,28 +1240,69 @@ mod tests {
             "team/project"
         );
         assert_eq!(
-            project_from_remote("git@gitlab.example:team/project.git", "gitlab.example", "/gitlab")
-                .unwrap(),
+            project_from_remote(
+                "git@gitlab.example:team/project.git",
+                "gitlab.example",
+                "/gitlab"
+            )
+            .unwrap(),
             "team/project"
         );
-        assert!(project_from_remote("https://evil.example/team/project.git", "gitlab.example", "").is_err());
-        assert!(project_from_remote("https://gitlab.example/team/../secrets.git", "gitlab.example", "").is_err());
-        assert!(project_from_remote("http://gitlab.example/team/project.git", "gitlab.example", "").is_err());
-        assert!(project_from_remote("https://gitlab.example/team/project.git", "gitlab.example", "/gitlab").is_err());
+        assert!(
+            project_from_remote(
+                "https://evil.example/team/project.git",
+                "gitlab.example",
+                ""
+            )
+            .is_err()
+        );
+        assert!(
+            project_from_remote(
+                "https://gitlab.example/team/../secrets.git",
+                "gitlab.example",
+                ""
+            )
+            .is_err()
+        );
+        assert!(
+            project_from_remote(
+                "http://gitlab.example/team/project.git",
+                "gitlab.example",
+                ""
+            )
+            .is_err()
+        );
+        assert!(
+            project_from_remote(
+                "https://gitlab.example/team/project.git",
+                "gitlab.example",
+                "/gitlab"
+            )
+            .is_err()
+        );
     }
 
     #[tokio::test]
-    async fn mappings_cursors_events_and_proposals_are_workspace_scoped_and_deduplicated() -> Result<()> {
+    async fn mappings_cursors_events_and_proposals_are_workspace_scoped_and_deduplicated()
+    -> Result<()> {
         let pool = SqlitePoolOptions::new()
             .max_connections(1)
             .connect("sqlite::memory:")
             .await?;
-        sqlx::raw_sql(include_str!("../../migrations/20261104001_gitlab_agent_workflow.sql"))
-            .execute(&pool)
-            .await?;
+        sqlx::raw_sql(include_str!(
+            "../../migrations/20261104001_gitlab_agent_workflow.sql"
+        ))
+        .execute(&pool)
+        .await?;
         let repository = GitLabRepository::new(pool);
         let connection = repository
-            .save_connection("alice", "gitlab.corp.internal", "", true, &["assigned_issues".into()])
+            .save_connection(
+                "alice",
+                "gitlab.corp.internal",
+                "",
+                true,
+                &["assigned_issues".into()],
+            )
             .await?;
         assert_eq!(connection.credential_id, TOKEN_CREDENTIAL_ID);
         repository
@@ -1128,7 +1315,9 @@ mod tests {
             .select_issue_for_session("alice", "session-1", "/work/one", "team/one", 5)
             .await?;
         assert_eq!(
-            repository.selected_issue_for_session("alice", "session-1").await?,
+            repository
+                .selected_issue_for_session("alice", "session-1")
+                .await?,
             Some(("/work/one".into(), "team/one".into(), 5))
         );
         assert!(
@@ -1138,13 +1327,26 @@ mod tests {
                 .is_err()
         );
         repository
-            .save_cursor("alice", "/work/one", "team/one", "assigned", "2026-11-04T10:00:00Z")
+            .save_cursor(
+                "alice",
+                "/work/one",
+                "team/one",
+                "assigned",
+                "2026-11-04T10:00:00Z",
+            )
             .await?;
         assert_eq!(
-            repository.cursor("alice", "/work/one", "team/one", "assigned").await?,
+            repository
+                .cursor("alice", "/work/one", "team/one", "assigned")
+                .await?,
             Some("2026-11-04T10:00:00Z".to_owned())
         );
-        assert_eq!(repository.cursor("alice", "/work/two", "team/one", "assigned").await?, None);
+        assert_eq!(
+            repository
+                .cursor("alice", "/work/two", "team/one", "assigned")
+                .await?,
+            None
+        );
 
         let event = InboxEvent {
             id: "event-1".into(),
@@ -1164,14 +1366,18 @@ mod tests {
             occurred_at: "2026-11-04T10:00:00Z".into(),
             read_at: None,
         };
-        repository.record_event("alice", &event, "issue:5:update").await?;
+        repository
+            .record_event("alice", &event, "issue:5:update")
+            .await?;
         let duplicate = InboxEvent {
             id: "event-2".into(),
             category: "authored_issues".into(),
             categories: vec!["authored_issues".into()],
             ..event.clone()
         };
-        repository.record_event("alice", &duplicate, "issue:5:update").await?;
+        repository
+            .record_event("alice", &duplicate, "issue:5:update")
+            .await?;
         let enriched = InboxEvent {
             id: "event-3".into(),
             category: "mentions_review_requests".into(),
@@ -1179,7 +1385,9 @@ mod tests {
             discussion_id: Some("discussion-1".into()),
             ..event.clone()
         };
-        repository.record_event("alice", &enriched, "issue:5:update").await?;
+        repository
+            .record_event("alice", &enriched, "issue:5:update")
+            .await?;
         let inbox = repository.inbox("alice", "/work/one").await?;
         assert_eq!(inbox.len(), 1);
         assert_eq!(
@@ -1197,18 +1405,25 @@ mod tests {
             occurred_at: "2026-11-04T10:01:00Z".into(),
             ..event.clone()
         };
-        repository.record_event("alice", &updated, "issue:5:update-2").await?;
+        repository
+            .record_event("alice", &updated, "issue:5:update-2")
+            .await?;
         let inbox = repository.inbox("alice", "/work/one").await?;
         assert_eq!(inbox.len(), 1, "unread updates coalesce");
         assert_eq!(inbox[0].title, "Updated issue");
-        assert!(repository.mark_event_read("alice", "event-1").await?);
+        assert_eq!(
+            repository.mark_event_read("alice", "event-1").await?,
+            Some("/work/one".to_owned())
+        );
         let read_again = InboxEvent {
             id: "event-4".into(),
             title: "Another update".into(),
             occurred_at: "2026-11-04T10:02:00Z".into(),
             ..event.clone()
         };
-        repository.record_event("alice", &read_again, "issue:5:update-3").await?;
+        repository
+            .record_event("alice", &read_again, "issue:5:update-3")
+            .await?;
         assert_eq!(repository.inbox("alice", "/work/one").await?.len(), 2);
         assert_eq!(repository.unread_counts("alice").await?.0, 1);
 
@@ -1225,10 +1440,25 @@ mod tests {
             session_stale: false,
         };
         repository.create_proposal("alice", &proposal).await?;
-        assert!(repository.decide_proposal("alice", "proposal-1", "approved").await?);
-        assert!(!repository.decide_proposal("alice", "proposal-1", "approved").await?);
-        assert!(repository.decide_proposal("alice", "proposal-1", "applied").await?);
-        assert_eq!(repository.proposals("alice", "/work/one").await?[0].status, "applied");
+        assert!(
+            repository
+                .decide_proposal("alice", "proposal-1", "approved")
+                .await?
+        );
+        assert!(
+            !repository
+                .decide_proposal("alice", "proposal-1", "approved")
+                .await?
+        );
+        assert!(
+            repository
+                .decide_proposal("alice", "proposal-1", "applied")
+                .await?
+        );
+        assert_eq!(
+            repository.proposals("alice", "/work/one").await?[0].status,
+            "applied"
+        );
         let reply_proposal = Proposal {
             id: "proposal-reply".into(),
             kind: "discussion_reply".into(),
@@ -1236,7 +1466,11 @@ mod tests {
             ..proposal.clone()
         };
         repository.create_proposal("alice", &reply_proposal).await?;
-        assert!(repository.decide_proposal("alice", "proposal-reply", "rejected").await?);
+        assert!(
+            repository
+                .decide_proposal("alice", "proposal-reply", "rejected")
+                .await?
+        );
         let expired = Proposal {
             id: "proposal-expired".into(),
             status: "pending".into(),
@@ -1250,12 +1484,24 @@ mod tests {
             .execute(repository.pool())
             .await?;
         assert_eq!(repository.expire_and_prune().await?, (1, 2));
-        assert_eq!(repository.proposal("alice", "proposal-expired").await?.unwrap().status, "expired");
+        assert_eq!(
+            repository
+                .proposal("alice", "proposal-expired")
+                .await?
+                .unwrap()
+                .status,
+            "expired"
+        );
         assert!(repository.inbox("alice", "/work/one").await?.is_empty());
         repository
             .save_connection("alice", "gitlab-new.corp.internal", "", true, &[])
             .await?;
-        assert_eq!(repository.selected_issue_for_session("alice", "session-1").await?, None);
+        assert_eq!(
+            repository
+                .selected_issue_for_session("alice", "session-1")
+                .await?,
+            None
+        );
         assert_eq!(repository.mapping("alice", "/work/one").await?, None);
         assert!(repository.proposals("alice", "/work/one").await?.is_empty());
         assert!(repository.inbox("alice", "/work/one").await?.is_empty());
