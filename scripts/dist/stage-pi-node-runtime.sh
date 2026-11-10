@@ -7,7 +7,11 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 output="$(realpath -m -- "$1")"
 [[ ! -e "$output" && ! -L "$output" ]] || { echo 'Refusing to replace an existing runtime' >&2; exit 1; }
 readarray -t pin < <(python3 - "$ROOT" <<'PY'
-import json, pathlib, re, sys, tomllib
+import json, pathlib, re, sys
+try:
+    import tomllib
+except ModuleNotFoundError:
+    import tomli as tomllib
 root = pathlib.Path(sys.argv[1])
 p = tomllib.loads((root / 'dependencies.toml').read_text())['external']
 lock = json.loads((root / 'scripts/dist/pi-node/package-lock.json').read_text())

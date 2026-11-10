@@ -8,7 +8,10 @@ from pathlib import Path
 import re
 import sys
 import tempfile
-import tomllib
+try:
+    import tomllib
+except ModuleNotFoundError:
+    import tomli as tomllib
 
 
 def _array_end(text: str, start: int) -> int:

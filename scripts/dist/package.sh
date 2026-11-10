@@ -13,7 +13,13 @@ python3 scripts/lint/verify-dist-manifest.py
 # The version must be the declared Cargo workspace version (optionally with a
 # tag-style leading v); the target defaults to this host's Rust triple, the
 # only names oqto-setup install accepts.
-VERSION="${1:-$(python3 -c 'import tomllib; print(tomllib.load(open("backend/Cargo.toml","rb"))["workspace"]["package"]["version"])')}"
+VERSION="${1:-$(python3 -c '
+try:
+    import tomllib
+except ModuleNotFoundError:
+    import tomli as tomllib
+print(tomllib.load(open("backend/Cargo.toml", "rb"))["workspace"]["package"]["version"])
+')}"
 TARGET="${2:-$(uname -m)-unknown-linux-gnu}"
 OUT_DIR="${OUT_DIR:-dist/out}"
 NAME="oqto-${VERSION}-${TARGET}"

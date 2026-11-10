@@ -9,7 +9,11 @@ python3 scripts/dist/verify-worktree-ownership.py --root "$ROOT_DIR"
 # Check all declarations BEFORE acquiring or reusing anything. A matching cached
 # receipt must not conceal a stale release manifest or a changed dependency lock.
 python3 - "$ROOT_DIR" <<'PY'
-import hashlib, json, pathlib, sys, tomllib
+import hashlib, json, pathlib, sys
+try:
+    import tomllib
+except ModuleNotFoundError:
+    import tomli as tomllib
 root = pathlib.Path(sys.argv[1])
 release = tomllib.loads((root/'dist/manifest.toml').read_text())['release']
 pins = tomllib.loads((root/'dependencies.toml').read_text())['external']
@@ -37,7 +41,11 @@ staged="$ROOT_DIR/dist/immutable/pi-runtime/pi"
 # never replaced; package.sh then fully validates it via `check-release`.
 if [[ -e "$staged" || -L "$staged" ]]; then
   python3 - "$staged/oqto-runtime.json" dist/manifest.toml <<'PY'
-import json, sys, tomllib
+import json, sys
+try:
+    import tomllib
+except ModuleNotFoundError:
+    import tomli as tomllib
 receipt_path, manifest_path = sys.argv[1:]
 try:
     receipt = json.load(open(receipt_path))

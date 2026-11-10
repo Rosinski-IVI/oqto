@@ -31,7 +31,10 @@ import stat
 import subprocess
 import sys
 import time
-import tomllib
+try:
+    import tomllib
+except ModuleNotFoundError:
+    import tomli as tomllib
 import urllib.request
 import uuid
 from dataclasses import asdict, dataclass, field

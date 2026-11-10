@@ -75,7 +75,11 @@ release_owned_runner() {
   exe="$(readlink -f "/proc/$pid/exe" 2>/dev/null)" || return 1
   [[ "$exe" == */immutable/bin/oqto-runner ]] || return 1
   configured="$(python3 - "${XDG_CONFIG_HOME:-${HOME:?HOME is required}/.config}/oqto/config.toml" <<'PY'
-import sys, tomllib
+import sys
+try:
+    import tomllib
+except ModuleNotFoundError:
+    import tomli as tomllib
 try:
     with open(sys.argv[1], "rb") as stream:
         print(tomllib.load(stream).get("pi", {}).get("executable", "pi"))
