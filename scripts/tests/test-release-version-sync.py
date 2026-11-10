@@ -27,8 +27,8 @@ pin_spec = importlib.util.spec_from_file_location(
 assert pin_spec and pin_spec.loader
 pin_module = importlib.util.module_from_spec(pin_spec)
 pin_spec.loader.exec_module(pin_module)
-prerelease_pin = pin_module.synchronize('[oqto]\nversion = "0.5.11"\n', "0.5.9-ivi.2")
-if 'version = "0.5.9-ivi.2"' not in prerelease_pin:
+prerelease_pin = pin_module.synchronize('[oqto]\nversion = "0.5.11"\n', "0.5.9-ivi.3")
+if 'version = "0.5.9-ivi.3"' not in prerelease_pin:
     raise SystemExit("platform pin helper did not preserve the IVI prerelease version")
 
 preflight = subprocess.run(

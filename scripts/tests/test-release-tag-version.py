@@ -54,12 +54,12 @@ class ReleaseTagTests(unittest.TestCase):
         )
         self.assertEqual(
             self.invoke(
-                "v0.5.9-ivi.2",
-                "0.5.9-ivi.2",
-                "0.5.9-ivi.2",
-                "0.5.9-ivi.2",
-                "0.5.9-ivi.2",
-                "0.5.9-ivi.2",
+                "v0.5.9-ivi.3",
+                "0.5.9-ivi.3",
+                "0.5.9-ivi.3",
+                "0.5.9-ivi.3",
+                "0.5.9-ivi.3",
+                "0.5.9-ivi.3",
             ).returncode,
             0,
         )
