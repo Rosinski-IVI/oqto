@@ -69,8 +69,10 @@ jobs:
         include:
           - arch: amd64
             podman_arch: linux/amd64
+            rust_target: x86_64-unknown-linux-gnu
           - arch: arm64
             podman_arch: linux/arm64
+            rust_target: aarch64-unknown-linux-gnu
     steps:
       - uses: actions/checkout@v4
         with:
@@ -82,15 +84,36 @@ jobs:
         with:
           platforms: arm64
 
+      - name: Install pinned Rust (rust-toolchain.toml)
+        run: rustup show active-toolchain || rustup toolchain install
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: '1.3.2'
+
+      - name: Install release build prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y protobuf-compiler libseccomp-dev rsync
+          python3 -m pip install 'ziglang==0.13.0'
+          cargo install cargo-zigbuild --version 0.20.1 --locked
+          rustup target add '${{ matrix.rust_target }}'
+          printf '#!/bin/sh\nexec python3 -m ziglang "$@"\n' > "$RUNNER_TEMP/zig"
+          chmod 0755 "$RUNNER_TEMP/zig"
+          echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
+
       - name: Stage release binaries for the image
+        env:
+          DIST_REQUIRE_GLIBC_FLOOR: '1'
+          OQTO_DIST_TARGET_TRIPLE: ${{ matrix.rust_target }}
         run: |
           set -euo pipefail
           # The image COPYs dist/immutable/bin/{oqto-runner,oqto-files,
           # oqto-sandbox,pi-bridge,oqto-setup}; stage them from the tagged
-          # checkout using the canonical distribution pipeline so the image
-          # carries the exact released bytes, not a `latest` build.
-          DIST_REQUIRE_GLIBC_FLOOR=1 just dist-stage-binaries --build
-          just dist-stage-frontend --build
+          # checkout using the canonical distribution pipeline, not a mutable
+          # `latest` build.
+          ./scripts/dist/stage-binaries.sh --build
+          ./scripts/dist/stage-frontend.sh --build
           test -x dist/immutable/bin/oqto-runner
           test -x dist/immutable/bin/oqto-files
           test -x dist/immutable/bin/pi-bridge

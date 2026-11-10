@@ -30,7 +30,9 @@ fi
 # unless DIST_REQUIRE_GLIBC_FLOOR=1 forces it.
 GLIBC_FLOOR="${GLIBC_FLOOR:-2.28}"
 HOST_ARCH="$(uname -m)"
-TARGET_TRIPLE="${HOST_ARCH}-unknown-linux-gnu"
+# Cross-architecture image workflows can request the same target triple that
+# the Docker build will run. Ordinary local staging still targets the host.
+TARGET_TRIPLE="${OQTO_DIST_TARGET_TRIPLE:-${HOST_ARCH}-unknown-linux-gnu}"
 USE_ZIGBUILD=false
 if command -v cargo-zigbuild >/dev/null 2>&1 && command -v zig >/dev/null 2>&1; then
   USE_ZIGBUILD=true
