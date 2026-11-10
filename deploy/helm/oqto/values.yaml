@@ -3,7 +3,8 @@ replicaCount: 1
 image:
   repository: ghcr.io/rosinski-ivi/oqto
   pullPolicy: IfNotPresent
-  tag: latest
+  # Empty uses the chart's appVersion, which the release workflow sets from its tag.
+  tag: ""
 
 imagePullSecrets: []
 nameOverride: ""

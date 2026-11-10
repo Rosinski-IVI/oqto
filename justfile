@@ -869,14 +869,15 @@ check-updates:
 # =============================================================================
 
 # Bump version across all components
-# Usage: just bump patch|minor|major|x.y.z
+# Usage: just bump patch|minor|major|x.y.z[-prerelease]
 bump version:
     #!/usr/bin/env bash
     set -euo pipefail
 
     ROOT="$(git rev-parse --show-toplevel)"
     current=$(grep -m1 '^version = ' "$ROOT/backend/Cargo.toml" | sed 's/version = "\(.*\)"/\1/')
-    IFS='.' read -r major minor patch <<< "$current"
+    current_core="${current%%-*}"
+    IFS='.' read -r major minor patch <<< "$current_core"
 
     case "{{version}}" in
         patch)
@@ -893,7 +894,7 @@ bump version:
             ;;
     esac
 
-    [[ "$new_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "Invalid version: $new_version" >&2; exit 1; }
+    [[ "$new_version" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?$ ]] || { echo "Invalid SemVer version: $new_version" >&2; exit 1; }
     echo "Bumping $current -> $new_version"
     python3 "$ROOT/scripts/release/sync-platform-pin.py" "$new_version"
 
@@ -908,6 +909,9 @@ bump version:
     # Edit only the version value: re-serializing (jq) breaks the Biome format gate.
     python3 "$ROOT/scripts/release/set-tauri-version.py" "$ROOT/frontend/src-tauri/tauri.conf.json" "$new_version"
 
+    sed -i 's/^version: .*/version: '"$new_version"'/' "$ROOT/deploy/helm/oqto/Chart.yaml"
+    sed -i 's/^appVersion: .*/appVersion: "'"$new_version"'"/' "$ROOT/deploy/helm/oqto/Chart.yaml"
+
     echo "Bumped all components to $new_version"
 
 # Release: bump version, commit, and tag
@@ -921,7 +925,8 @@ release version:
     fi
 
     current=$(grep -m1 '^version = ' backend/Cargo.toml | sed 's/version = "\(.*\)"/\1/')
-    IFS='.' read -r major minor patch <<< "$current"
+    current_core="${current%%-*}"
+    IFS='.' read -r major minor patch <<< "$current_core"
 
     case "{{version}}" in
         patch) new_version="$major.$minor.$((patch + 1))" ;;
@@ -929,6 +934,8 @@ release version:
         major) new_version="$((major + 1)).0.0" ;;
         *) new_version="{{version}}" ;;
     esac
+
+    [[ "$new_version" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?$ ]] || { echo "Invalid SemVer version: $new_version" >&2; exit 1; }
 
     just bump {{version}}
 

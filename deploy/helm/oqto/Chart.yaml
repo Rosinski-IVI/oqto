@@ -2,7 +2,7 @@ apiVersion: v2
 name: oqto
 description: Oqto all-in-one AI agent workspace
 type: application
-version: 0.1.0
-appVersion: "latest"
+version: 0.5.9-ivi.2
+appVersion: "0.5.9-ivi.2"
 annotations:
   org.opencontainers.image.source: https://github.com/Rosinski-IVI/oqto

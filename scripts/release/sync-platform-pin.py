@@ -6,8 +6,11 @@ import re
 
 
 def synchronize(text: str, version: str) -> str:
-    if not re.fullmatch(r"\d+\.\d+\.\d+", version):
-        raise ValueError("version must be numeric major.minor.patch")
+    if not re.fullmatch(
+        r"(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:-[0-9A-Za-z.-]+)?",
+        version,
+    ):
+        raise ValueError("version must be SemVer major.minor.patch with optional prerelease")
     sections = list(re.finditer(r"(?m)^\[oqto\]\s*$", text))
     if len(sections) != 1:
         raise ValueError("expected exactly one [oqto] section")

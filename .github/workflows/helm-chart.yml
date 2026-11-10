@@ -46,6 +46,7 @@ jobs:
             echo "::error::Release tag has no version"
             exit 1
           fi
+          python3 -B scripts/release/check-tag-version.py --tag "$RELEASE_TAG"
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
       - name: Lint and package chart

@@ -28,6 +28,11 @@ class SetTauriVersion(unittest.TestCase):
         self.assertEqual(len(changed), 1, changed)
         self.assertEqual(len(original.splitlines()), len(updated.splitlines()))
 
+    def test_prerelease_version_is_accepted(self) -> None:
+        original = (ROOT / "frontend/src-tauri/tauri.conf.json").read_text()
+        updated = module.set_version(original, "0.5.9-ivi.2")
+        self.assertEqual(json.loads(updated)["version"], "0.5.9-ivi.2")
+
     def test_nested_versions_are_not_mistaken_for_the_top_level(self) -> None:
         text = '{\n\t"version": "1.0.0",\n\t"plugins": {\n\t\t"x": { "version": "3.0.0" }\n\t}\n}\n'
         updated = module.set_version(text, "1.0.1")
