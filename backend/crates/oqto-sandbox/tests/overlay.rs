@@ -143,7 +143,28 @@ fn real_confined_child_and_nested_bind_cannot_recover_denied_data() -> Result<()
         serde_json::to_string(&readonly.display().to_string())?
     ))?;
     let config = overlay.apply(&SandboxConfig::minimal(), &work)?;
-    let script = "test \"$(cat secret)\" != overlay-secret-canary && ! (echo changed > readonly) && bwrap --bind / / -- /bin/sh -c 'test \"$(cat secret)\" != overlay-secret-canary && ! (echo nested > readonly)'";
+    let script = r#"
+        test "$(cat secret 2>/dev/null)" != overlay-secret-canary &&
+        ! (echo changed > readonly 2>/dev/null) && {
+            nested_output=$(bwrap --bind / / -- /bin/sh -c 'test "$(cat secret 2>/dev/null)" != overlay-secret-canary && ! (echo nested > readonly 2>/dev/null)' 2>&1)
+            nested_status=$?
+            if [ "$nested_status" -eq 0 ]; then
+                exit 0
+            fi
+            case "$nested_output" in
+                *"No permissions to create a new namespace"*)
+                    # The policy already blocked both operations in the outer
+                    # sandbox. A nested namespace being unavailable is also a
+                    # safe outcome; do not fail this test for host capability.
+                    exit 0
+                    ;;
+                *)
+                    printf '%s\n' "$nested_output" >&2
+                    exit "$nested_status"
+                    ;;
+            esac
+        }
+    "#;
     let mut command = oqto_sandbox::build_sandbox_command(
         &config,
         &work,
