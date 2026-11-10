@@ -211,6 +211,9 @@ mod tests {
     #[cfg(target_os = "linux")]
     #[test]
     fn cwd_changes_only_chdir_not_mount_grants() -> Result<()> {
+        let _env = crate::config::TEST_ENV_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         if !SandboxConfig::is_bwrap_available() {
             return Ok(());
         }
@@ -298,6 +301,9 @@ mod tests {
     #[cfg(target_os = "linux")]
     #[test]
     fn linux_keeps_bwrap_argv_and_literal_payload_arguments() {
+        let _env = crate::config::TEST_ENV_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         if !SandboxConfig::is_bwrap_available() {
             return;
         }

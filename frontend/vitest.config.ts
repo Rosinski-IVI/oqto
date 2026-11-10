@@ -13,6 +13,12 @@ export default defineConfig({
 	resolve: {
 		alias: {
 			"@": path.resolve(__dirname, "./"),
+			// These unit tests mock the optional Flash worker client. Keep its
+			// module resolvable without requiring the sibling oqto-flash checkout.
+			"@oqto-flash/worker-client": path.resolve(
+				__dirname,
+				"tests/mocks/oqto-flash-worker-client.ts",
+			),
 			"@oqto-flash": path.resolve(__dirname, "../..", "oqto-flash/src"),
 			"@byteowlz/design-system": path.resolve(
 				__dirname,

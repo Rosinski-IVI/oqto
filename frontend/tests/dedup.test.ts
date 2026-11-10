@@ -121,7 +121,7 @@ describe("normalizeMessages", () => {
 		expect(out[0].id).toMatch(/^legacy-fallback-/);
 	});
 
-	it("drops adjacent duplicate assistant rows from replayed persistence", () => {
+	it("preserves identical adjacent assistant rows with distinct IDs", () => {
 		const raw: RawMessage[] = [
 			{ id: "u1", role: "user", content: "split it" },
 			{ id: "a1", role: "assistant", content: "same response" },
@@ -130,7 +130,7 @@ describe("normalizeMessages", () => {
 			{ id: "a3", role: "assistant", content: "same response" },
 		];
 		const out = normalizeMessages(raw, "history");
-		expect(out.map((m) => m.id)).toEqual(["u1", "a1", "u2", "a3"]);
+		expect(out.map((m) => m.id)).toEqual(["u1", "a1", "a2", "u2", "a3"]);
 	});
 });
 

@@ -3487,6 +3487,9 @@ fn policy_mounts_under_tmp(args: &[String], workspace: &Path) -> Vec<String> {
 }
 
 #[cfg(test)]
+pub(crate) static TEST_ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+#[cfg(test)]
 mod tests {
     #[test]
     fn platform_constructor_matches_named_builtin() -> anyhow::Result<()> {
@@ -3540,6 +3543,7 @@ mod tests {
     #[cfg(target_os = "linux")]
     #[test]
     fn workspace_cache_is_granted_and_redirected_per_workspace() {
+        let _env = env_guard();
         let tmp = tempfile::tempdir().expect("tempdir");
         let ws_a = tmp.path().join("a");
         let ws_b = tmp.path().join("b");
@@ -3652,6 +3656,7 @@ mod tests {
     #[cfg(target_os = "linux")]
     #[test]
     fn landlock_grants_standard_devices_without_binding_dev() {
+        let _env = env_guard();
         // git opens /dev/null read-write and shells redirect to it. These must
         // be granted in the ruleset, never via allow_write: an allow_write
         // entry also emits a bwrap --bind, and binding /dev mounts over
@@ -3690,6 +3695,7 @@ mod tests {
     #[cfg(target_os = "linux")]
     #[test]
     fn managed_runtime_dir_is_bound_read_only_when_present() {
+        let _env = env_guard();
         let tmp = tempfile::tempdir().expect("tempdir");
         let workspace = tmp.path().join("ws");
         std::fs::create_dir_all(&workspace).expect("workspace");
@@ -3715,6 +3721,7 @@ mod tests {
     #[cfg(target_os = "linux")]
     #[test]
     fn absent_allow_write_paths_are_skipped_not_bound() {
+        let _env = env_guard();
         // A profile may list optional tool dirs (~/.codex, ~/.claude, ...).
         // bwrap's --bind fails when the source is missing, which would abort
         // every sandboxed spawn on hosts where that tool is not installed.
@@ -3901,17 +3908,16 @@ max_cpu_seconds = 32
 
     use super::*;
     use std::env;
-    use std::sync::Mutex;
     use tempfile::tempdir;
 
     /// Serializes tests that mutate process-global env vars (HOME/PATH/shim
     /// override). Without this, parallel test threads race on the shared env
     /// and intermittently observe each other's HOME. Poison-tolerant: a panic
     /// while held must not wedge the rest of the suite.
-    static ENV_LOCK: Mutex<()> = Mutex::new(());
-
     fn env_guard() -> std::sync::MutexGuard<'static, ()> {
-        ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner())
+        super::TEST_ENV_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
     }
 
     /// The strict profile with its enforced Landlock shim and seccomp policy

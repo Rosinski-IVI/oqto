@@ -9,17 +9,16 @@
 //! A change here is a change in what an agent can see. Update the table only
 //! with a reason.
 //!
-//! Probes are read-only by construction: they run against real paths in the
-//! developer's home, so nothing here may create, append to, or remove a file.
-//! Write behaviour is covered by the fixture-based `policy_equivalence` suite,
-//! which owns the tree it mutates.
+//! Contract-table probes are read-only and skip paths absent on the host. A
+//! private fixture inside the test workspace supplies a deterministic denied
+//! path when the host has no existing credential file; the tempdir owns cleanup.
 
 use oqto_sandbox::{
     SandboxConfig, SandboxProfile,
     path_policy::{Access, ResolutionContext, ResourceRegistry},
     policy_translate::translate_profile,
 };
-use std::{path::Path, process::Command};
+use std::{collections::HashSet, path::Path, process::Command};
 
 fn bwrap_available() -> bool {
     if !SandboxConfig::is_bwrap_available() {
@@ -145,7 +144,7 @@ fn a_real_sandbox_enforces_the_readability_contract() {
     // into it. Nothing would run and every probe would read as denied.
     let workspace = tempfile::tempdir_in(&home).expect("tempdir");
 
-    let mut compared = 0usize;
+    let mut observed = HashSet::new();
     for (name, spec, expected) in READABILITY_CONTRACT {
         let path = probe_path(&home, spec);
         if !path.is_file() {
@@ -160,12 +159,37 @@ fn a_real_sandbox_enforces_the_readability_contract() {
             *expected,
             "{name}: real sandbox disagrees with the contract for {spec}"
         );
-        compared += 1;
+        observed.insert((*name, *expected));
     }
-    assert!(
-        compared >= 12,
-        "too few contract paths exist on this host to be meaningful: {compared}"
-    );
+
+    // Keep the deny-side check meaningful even on CI hosts with no real
+    // ~/.ssh/known_hosts or other host credential file. This fixture is wholly
+    // contained in the test-owned workspace and exercises the same bwrap path.
+    let denied_fixture = workspace.path().join("policy-contract-denied");
+    std::fs::write(&denied_fixture, "fixture").expect("write private fixture");
+    for profile in ["minimal", "development", "strict"] {
+        let mut config = SandboxConfig::from_profile(profile);
+        config
+            .deny_read
+            .push(denied_fixture.to_string_lossy().into_owned());
+        let args = config
+            .build_bwrap_args_for_user(workspace.path(), None)
+            .unwrap_or_else(|| panic!("{profile}: builder produced no arguments"));
+        assert!(
+            !sandbox_can_read(&args, &denied_fixture),
+            "{profile}: the denied fixture was readable"
+        );
+        observed.insert((profile, false));
+    }
+
+    for profile in ["minimal", "development", "strict"] {
+        for readable in [false, true] {
+            assert!(
+                observed.contains(&(profile, readable)),
+                "host fixtures did not exercise readable={readable} for {profile}"
+            );
+        }
+    }
 }
 
 #[test]

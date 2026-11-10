@@ -109,10 +109,16 @@ jobs:
             --out-dir "$RUNNER_TEMP/oqto-seccomp" \
             --arches x86_64
 
+      - name: Build Landlock sandbox shim
+        working-directory: backend
+        run: cargo build -p oqto --bin oqto-sandbox
+
       - name: Test
         working-directory: backend
         env:
           OQ_ADAPTIVE_SECCOMP_BPF: ${{ runner.temp }}/oqto-seccomp/default-x86_64.bpf
+          OQTO_SANDBOX_SHIM_BIN: ${{ github.workspace }}/backend/target/debug/oqto-sandbox
+          RUST_TEST_THREADS: "2"
         run: cargo test
 
       - name: Runner user-plane smoke

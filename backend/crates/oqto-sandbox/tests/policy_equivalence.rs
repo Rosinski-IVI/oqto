@@ -43,14 +43,29 @@ fn observed_access(args: &[String], file: &Path) -> Access {
            if echo probe >> {path} 2>/dev/null; then echo WRITE; fi; \
          fi"
     );
-    let output = Command::new("bwrap")
-        .args(args)
-        .args(["--ro-bind", "/usr", "/usr"])
-        // /bin and /lib are symlinks into /usr on merged-usr systems, so they
-        // are recreated as symlinks rather than bound.
-        .args(["--symlink", "usr/bin", "/bin"])
-        .args(["--symlink", "usr/lib", "/lib"])
-        .args(["--symlink", "usr/lib", "/lib64"])
+    let mut command = Command::new("bwrap");
+    command.args(args).args(["--ro-bind", "/usr", "/usr"]);
+    // Recreate merged-usr aliases using their actual targets: /lib64 points
+    // to usr/lib64 on some hosts and usr/lib on others. Non-symlink FHS dirs
+    // are bound read-only instead.
+    for alias in ["/bin", "/lib", "/lib64"] {
+        let path = Path::new(alias);
+        if std::fs::symlink_metadata(path)
+            .expect("system directory exists")
+            .file_type()
+            .is_symlink()
+        {
+            let target = std::fs::read_link(path).expect("read system symlink");
+            command.args([
+                "--symlink",
+                target.to_str().expect("UTF-8 system symlink target"),
+                alias,
+            ]);
+        } else {
+            command.args(["--ro-bind", alias, alias]);
+        }
+    }
+    let output = command
         .args(["--proc", "/proc"])
         .args(["--dev", "/dev"])
         .arg("/usr/bin/sh")
@@ -58,6 +73,12 @@ fn observed_access(args: &[String], file: &Path) -> Access {
         .arg(script)
         .output()
         .expect("spawning bwrap");
+    assert!(
+        output.status.success(),
+        "bwrap probe failed ({:?}): {}",
+        output.status,
+        String::from_utf8_lossy(&output.stderr)
+    );
     let stdout = String::from_utf8_lossy(&output.stdout);
     if stdout.contains("WRITE") {
         Access::Write

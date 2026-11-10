@@ -3539,7 +3539,7 @@
 .wb-gitlab button,
 .wb-issues__bar > button {
 	border: 1px solid var(--border);
-	border-radius: 4px;
+	border-radius: var(--radius-sm, 0) !important;
 	padding: 4px 7px;
 	background: var(--background);
 	color: var(--foreground);
@@ -3568,7 +3568,7 @@
 .wb-gitlab__form textarea {
 	min-inline-size: 0;
 	border: 1px solid var(--border);
-	border-radius: 4px;
+	border-radius: var(--radius-sm, 0) !important;
 	padding: 5px;
 	background: var(--background);
 	color: var(--foreground);
@@ -3607,7 +3607,7 @@
 	justify-content: center;
 	min-inline-size: 18px;
 	block-size: 18px;
-	border-radius: 999px;
+	border-radius: 50% !important;
 	padding-inline: 5px;
 	background: var(--primary);
 	color: var(--primary-foreground, var(--background));

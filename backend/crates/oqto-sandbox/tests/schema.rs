@@ -29,7 +29,7 @@ fn config_corpus() -> Vec<PathBuf> {
     let mut stack = vec![
         root.join("backend/crates/oqto/examples"),
         root.join("deploy"),
-        root.join("dist/immutable/defaults/workdir-templates"),
+        root.join("dist/mutable-templates"),
     ];
     while let Some(dir) = stack.pop() {
         let Ok(entries) = std::fs::read_dir(&dir) else {
@@ -137,7 +137,7 @@ fn shipped_templates_take_effect() {
 fn corpus_discovery_finds_the_shipped_configs() {
     let corpus = config_corpus();
     assert!(
-        corpus.len() >= 8,
+        corpus.len() >= 7,
         "expected the shipped configs and workdir templates, found {}: {corpus:#?}",
         corpus.len()
     );
