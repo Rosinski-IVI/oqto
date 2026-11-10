@@ -3071,7 +3071,7 @@ mod tests {
                 request: Some(oqto_protocol::gitlab::GitLabAgentRpcRequest {
                     version: 1,
                     request_id: "rpc-1".into(),
-                    operation: oqto_protocol::gitlab::GitLabAgentOperation::ReadSelectedIssue,
+                    operation: oqto_protocol::gitlab::GitLabAgentOperation::ReadSelectedIssue {},
                 }),
                 error: None,
             },

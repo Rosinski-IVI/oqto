@@ -99,10 +99,20 @@ jobs:
       - name: Install native deps
         run: |
           sudo apt-get update
-          sudo apt-get install -y protobuf-compiler libseccomp-dev
+          sudo apt-get install -y protobuf-compiler libseccomp-dev bubblewrap
+
+      - name: Generate seccomp filter for hands integration test
+        working-directory: backend
+        run: |
+          cargo run -p oqto-sandbox --bin seccomp-policy-gen -- \
+            --policy crates/oqto/examples/seccomp/default.policy.toml \
+            --out-dir "$RUNNER_TEMP/oqto-seccomp" \
+            --arches x86_64
 
       - name: Test
         working-directory: backend
+        env:
+          OQ_ADAPTIVE_SECCOMP_BPF: ${{ runner.temp }}/oqto-seccomp/default-x86_64.bpf
         run: cargo test
 
       - name: Runner user-plane smoke

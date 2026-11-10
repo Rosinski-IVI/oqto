@@ -5,4 +5,4 @@
  * work-directory Installation. The authenticated execution context supplies
  * the target; v0 intentionally has no data-copy option.
  */
-export type AppPublishRequest = { app_id: string };
+export type AppPublishRequest = { app_id: string, };

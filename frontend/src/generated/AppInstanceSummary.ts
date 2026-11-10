@@ -4,16 +4,4 @@ import type { AppLocalizedTitle } from "./AppLocalizedTitle";
 import type { AppOwnerKind } from "./AppOwnerKind";
 import type { AppPresentationSummary } from "./AppPresentationSummary";
 
-export type AppInstanceSummary = {
-	instance_id: string;
-	definition_id: string;
-	installation_id: string;
-	app_id: string;
-	title: AppLocalizedTitle;
-	version: string;
-	content_digest: string;
-	installation_owner_kind: AppOwnerKind;
-	binding_kind: AppOwnerKind;
-	status: AppInstanceStatus;
-	presentations: Array<AppPresentationSummary>;
-};
+export type AppInstanceSummary = { instance_id: string, definition_id: string, installation_id: string, app_id: string, title: AppLocalizedTitle, version: string, content_digest: string, installation_owner_kind: AppOwnerKind, binding_kind: AppOwnerKind, status: AppInstanceStatus, presentations: Array<AppPresentationSummary>, };

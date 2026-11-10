@@ -5,7 +5,4 @@ import type { JsonValue } from "../../../backend/crates/oqto-protocol/bindings/s
 /**
  * Non-chat payload; authentication and connection identity belong to the transport.
  */
-export type ControlRequest = {
-	operation: ControlOperation;
-	arguments: JsonValue;
-};
+export type ControlRequest = { operation: ControlOperation, arguments: JsonValue, };

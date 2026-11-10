@@ -4,7 +4,4 @@ import type { CredentialCommand } from "./CredentialCommand";
 /**
  * Account is derived by the authenticated host, never an agent-supplied identity.
  */
-export type CredentialManageRequest = {
-	account_id: string;
-	command: CredentialCommand;
-};
+export type CredentialManageRequest = { account_id: string, command: CredentialCommand, };

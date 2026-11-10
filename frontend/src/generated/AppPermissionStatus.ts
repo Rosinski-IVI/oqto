@@ -6,11 +6,4 @@ import type { AppPermissionState } from "./AppPermissionState";
 /**
  * Current permission standing of one Instance.
  */
-export type AppPermissionStatus = {
-	request: AppPermissionRequest;
-	state: AppPermissionState;
-	instance_status: AppInstanceStatus;
-	decided_by_account_id?: string;
-	decided_at?: string;
-	revoked_at?: string;
-};
+export type AppPermissionStatus = { request: AppPermissionRequest, state: AppPermissionState, instance_status: AppInstanceStatus, decided_by_account_id?: string, decided_at?: string, revoked_at?: string, };

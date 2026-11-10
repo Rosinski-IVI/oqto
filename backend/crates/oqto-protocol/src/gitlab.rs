@@ -35,15 +35,17 @@ pub enum GitLabDiscussionSide {
 
 /// Closed Pi-to-Oqto GitLab operations. The active Pi session is supplied by
 /// the runner subscription, never by the extension payload.
+// Keep no-argument operations as empty struct variants: internally tagged unit
+// variants accept unexpected fields even with `deny_unknown_fields`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "operation", rename_all = "snake_case", deny_unknown_fields)]
 pub enum GitLabAgentOperation {
-    ReadSelectedIssue,
-    ReadSelectedIssueNotes,
-    ReadLinkedMergeRequest,
-    ReadLinkedMergeRequestDiscussions,
-    ReadProjectContext,
-    ProposeImplementationStart,
+    ReadSelectedIssue {},
+    ReadSelectedIssueNotes {},
+    ReadLinkedMergeRequest {},
+    ReadLinkedMergeRequestDiscussions {},
+    ReadProjectContext {},
+    ProposeImplementationStart {},
     ProposeIssueUpdate {
         #[serde(default)]
         title: Option<String>,
@@ -276,6 +278,10 @@ mod tests {
             "operation": {"operation": "read_selected_issue"}
         });
         assert!(serde_json::from_value::<GitLabAgentRpcRequest>(value.clone()).is_ok());
+        assert_eq!(
+            serde_json::to_value(GitLabAgentOperation::ReadSelectedIssue {}).unwrap(),
+            serde_json::json!({"operation": "read_selected_issue"})
+        );
 
         let mut with_account = value.clone();
         with_account["account_id"] = serde_json::json!("other-user");

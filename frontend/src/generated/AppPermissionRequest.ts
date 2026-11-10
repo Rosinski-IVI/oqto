@@ -6,15 +6,8 @@ import type { AppLocalizedTitle } from "./AppLocalizedTitle";
  * Exactly what one Instance asks for, pinned to the Definition a person
  * reviews. Approving this request approves nothing else.
  */
-export type AppPermissionRequest = {
-	instance_id: string;
-	definition_id: string;
-	/**
-	 * Immutable Definition digest the decision is bound to.
-	 */
-	content_digest: string;
-	app_id: string;
-	title: AppLocalizedTitle;
-	version: string;
-	capabilities: Array<AppCapabilityRequest>;
-};
+export type AppPermissionRequest = { instance_id: string, definition_id: string, 
+/**
+ * Immutable Definition digest the decision is bound to.
+ */
+content_digest: string, app_id: string, title: AppLocalizedTitle, version: string, capabilities: Array<AppCapabilityRequest>, };

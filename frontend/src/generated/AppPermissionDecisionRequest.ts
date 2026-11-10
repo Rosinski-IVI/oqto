@@ -8,7 +8,4 @@ import type { AppPermissionDecision } from "./AppPermissionDecision";
  * backend refuses the decision when it no longer matches the pinned
  * Definition, so an approval can never land on republished code.
  */
-export type AppPermissionDecisionRequest = {
-	decision: AppPermissionDecision;
-	reviewed_content_digest: string;
-};
+export type AppPermissionDecisionRequest = { decision: AppPermissionDecision, reviewed_content_digest: string, };

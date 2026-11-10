@@ -3,9 +3,4 @@
 /**
  * Where an Instance stands in the permission lifecycle.
  */
-export type AppPermissionState =
-	| "not_required"
-	| "awaiting_decision"
-	| "allowed"
-	| "denied"
-	| "revoked";
+export type AppPermissionState = "not_required" | "awaiting_decision" | "allowed" | "denied" | "revoked";

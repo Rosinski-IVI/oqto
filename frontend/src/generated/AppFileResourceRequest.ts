@@ -7,15 +7,12 @@ import type { AppFileAccess } from "./AppFileAccess";
  * `path` is always relative to the bound work directory. Absolute host paths
  * are never public identity and must never appear here.
  */
-export type AppFileResourceRequest = {
-	/**
-	 * Stable semantic name the App uses for this resource, such as `outputs`.
-	 */
-	role: string;
-	path: string;
-	access: AppFileAccess;
-	/**
-	 * True when the App asks to observe changes, not only read once.
-	 */
-	watch: boolean;
-};
+export type AppFileResourceRequest = { 
+/**
+ * Stable semantic name the App uses for this resource, such as `outputs`.
+ */
+role: string, path: string, access: AppFileAccess, 
+/**
+ * True when the App asks to observe changes, not only read once.
+ */
+watch: boolean, };

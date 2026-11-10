@@ -40,7 +40,7 @@ describe("file viewer", () => {
 			/>,
 		);
 		const image = screen.getByAltText("logo.png") as HTMLImageElement;
-		expect(image.src).toContain("/api/workspace/files/file");
+		expect(image.src).toContain("/api/workspace/files/thumbnail");
 		expect(image.src).toContain("path=docs%2Flogo.png");
 		expect(image.src).toContain("workspace_path=%2Fw");
 	});

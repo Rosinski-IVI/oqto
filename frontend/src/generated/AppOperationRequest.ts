@@ -6,4 +6,4 @@
  * The summary is the package author's own description, shown to the person
  * deciding. The implementing executable stays a package-internal detail.
  */
-export type AppOperationRequest = { id: string; summary?: string };
+export type AppOperationRequest = { id: string, summary?: string, };

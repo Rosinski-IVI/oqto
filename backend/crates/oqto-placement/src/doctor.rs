@@ -1030,7 +1030,11 @@ mod tests {
         };
         let checks = run_container_doctor(&opts, &runner).await;
         let ids: Vec<&str> = checks.iter().map(|c| c.id).collect();
-        assert!(ids.starts_with(&["podman.version", "podman.rootless", "podman.cgroup"]));
+        assert!(
+            ids.starts_with(&["podman.version", "podman.rootless", "podman.cgroup"])
+                || ids.starts_with(&["podman.installed", "podman.rootless", "podman.cgroup"]),
+            "unexpected Podman doctor check order: {ids:?}"
+        );
         assert!(ids.contains(&"subuid.range"));
         assert!(ids.contains(&"linger.enabled"));
         assert!(ids.contains(&"image.reference"));

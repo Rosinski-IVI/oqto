@@ -63,7 +63,7 @@ pub fn normalize_instance_url(input: &str) -> Result<(String, String)> {
 }
 
 pub fn normalize_path_prefix(path: &str) -> Result<String> {
-    if path == "/" {
+    if path.is_empty() || path == "/" {
         return Ok(String::new());
     }
     ensure!(

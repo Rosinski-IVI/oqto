@@ -3,14 +3,4 @@
 /**
  * Closed vocabulary; arbitrary slash commands cannot enter this path.
  */
-export type ControlOperation =
-	| "presentation_bind"
-	| "presentation_list"
-	| "presentation_unbind"
-	| "selection_create"
-	| "selection_get"
-	| "selection_open"
-	| "selection_close"
-	| "selection_save"
-	| "selection_submit"
-	| "selection_ack";
+export type ControlOperation = "presentation_bind" | "presentation_list" | "presentation_unbind" | "selection_create" | "selection_get" | "selection_open" | "selection_close" | "selection_save" | "selection_submit" | "selection_ack";

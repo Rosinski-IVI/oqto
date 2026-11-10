@@ -7,4 +7,4 @@ import type { JsonValue } from "../../../backend/crates/oqto-protocol/bindings/s
  * sandboxed frame. No App content URL exists, so there is no bearer token,
  * cookie, hostname, port, or DNS requirement.
  */
-export type AppKvGetResponse = { value?: JsonValue };
+export type AppKvGetResponse = { value?: JsonValue, };

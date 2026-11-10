@@ -10,57 +10,56 @@ import type { TokenUsage } from "./TokenUsage";
  *
  * This is the unified message format that all agent types convert to.
  */
-export type CanonMessage = {
-	/**
-	 * Unique message ID.
-	 */
-	id: string;
-	/**
-	 * Conversation/session ID this message belongs to.
-	 */
-	sessionId: string;
-	/**
-	 * Message role.
-	 */
-	role: MessageRole;
-	/**
-	 * Flattened text content (for search indexing).
-	 */
-	content: string;
-	/**
-	 * Structured content parts.
-	 */
-	parts: Array<CanonPart>;
-	/**
-	 * Creation timestamp (Unix milliseconds).
-	 */
-	createdAt: bigint;
-	/**
-	 * Completion timestamp (Unix milliseconds, for assistant messages).
-	 */
-	completed_at: bigint | null;
-	/**
-	 * Model used for this message.
-	 */
-	model: ModelInfo | null;
-	/**
-	 * Token usage.
-	 */
-	tokens: TokenUsage | null;
-	/**
-	 * Cost in USD.
-	 */
-	cost_usd: number | null;
-	/**
-	 * Parent message ID (for threading/branching).
-	 */
-	parent_id: string | null;
-	/**
-	 * Agent name/type that generated this message.
-	 */
-	agent: string | null;
-	/**
-	 * Additional metadata.
-	 */
-	metadata: JsonValue | null;
-};
+export type CanonMessage = { 
+/**
+ * Unique message ID.
+ */
+id: string, 
+/**
+ * Conversation/session ID this message belongs to.
+ */
+sessionId: string, 
+/**
+ * Message role.
+ */
+role: MessageRole, 
+/**
+ * Flattened text content (for search indexing).
+ */
+content: string, 
+/**
+ * Structured content parts.
+ */
+parts: Array<CanonPart>, 
+/**
+ * Creation timestamp (Unix milliseconds).
+ */
+createdAt: bigint, 
+/**
+ * Completion timestamp (Unix milliseconds, for assistant messages).
+ */
+completed_at: bigint | null, 
+/**
+ * Model used for this message.
+ */
+model: ModelInfo | null, 
+/**
+ * Token usage.
+ */
+tokens: TokenUsage | null, 
+/**
+ * Cost in USD.
+ */
+cost_usd: number | null, 
+/**
+ * Parent message ID (for threading/branching).
+ */
+parent_id: string | null, 
+/**
+ * Agent name/type that generated this message.
+ */
+agent: string | null, 
+/**
+ * Additional metadata.
+ */
+metadata: JsonValue | null, };

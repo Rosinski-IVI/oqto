@@ -48,6 +48,7 @@ impl Hands {
         config.extra_rw_bind.clear();
         config.workspace_cache_enabled = false;
         config.seccomp_mode = SeccompMode::Enforce;
+        config.landlock_mode = oqto_sandbox::LandlockMode::Off;
         let bpf = std::env::var("OQ_ADAPTIVE_SECCOMP_BPF")?;
         config.seccomp_bpf_path = Some(bpf);
         if let Some(extra) = extra {
@@ -196,7 +197,8 @@ async fn real_bwrap_seccomp_replacement_and_revocation_keep_brain_identity() {
     let brain_identity = (std::process::id(), binding().session_id);
     let mut fence = ExecutorFence::default();
     let generation = fence.install_after_confirmed_stop(0).unwrap();
-    let mut first = Hands::start(&workdir, None, generation).unwrap();
+    let mut first = Hands::start(&workdir, None, generation)
+        .unwrap_or_else(|error| panic!("start initial hands: {error:#}"));
     let first_pid = first.child.id();
     assert_eq!(
         first

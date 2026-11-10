@@ -8,14 +8,4 @@ import type { AppOperationRequest } from "./AppOperationRequest";
 /**
  * One capability an App asks for, in the exact shape a person approves.
  */
-export type AppCapabilityRequest =
-	| { capability: "connections"; slots: Array<AppConnectionSlot> }
-	| { capability: "files"; resources: Array<AppFileResourceRequest> }
-	| { capability: "operations"; operations: Array<AppOperationRequest> }
-	| { capability: "theme" }
-	| { capability: "kv" }
-	| {
-			capability: "agent_context";
-			topics: Array<AppContextTopicRequest>;
-			actions: Array<AppContextActionRequest>;
-	  };
+export type AppCapabilityRequest = { "capability": "connections", slots: Array<AppConnectionSlot>, } | { "capability": "files", resources: Array<AppFileResourceRequest>, } | { "capability": "operations", operations: Array<AppOperationRequest>, } | { "capability": "theme" } | { "capability": "kv" } | { "capability": "agent_context", topics: Array<AppContextTopicRequest>, actions: Array<AppContextActionRequest>, };

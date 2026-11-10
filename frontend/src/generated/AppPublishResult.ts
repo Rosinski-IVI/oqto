@@ -4,13 +4,8 @@ import type { AppPermissionRequest } from "./AppPermissionRequest";
 import type { AppPublishStatus } from "./AppPublishStatus";
 import type { AppRejection } from "./AppRejection";
 
-export type AppPublishResult = {
-	workflow_id: string;
-	status: AppPublishStatus;
-	instance?: AppInstanceSummary;
-	/**
-	 * Present when the Instance is awaiting a permission decision.
-	 */
-	permission_request?: AppPermissionRequest;
-	rejection?: AppRejection;
-};
+export type AppPublishResult = { workflow_id: string, status: AppPublishStatus, instance?: AppInstanceSummary, 
+/**
+ * Present when the Instance is awaiting a permission decision.
+ */
+permission_request?: AppPermissionRequest, rejection?: AppRejection, };

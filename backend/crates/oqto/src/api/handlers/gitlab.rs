@@ -886,7 +886,7 @@ pub(crate) async fn handle_agent_rpc(
     let rpc_request_id = request.request_id.clone();
 
     let response = match request.operation {
-        GitLabAgentOperation::ReadSelectedIssue => {
+        GitLabAgentOperation::ReadSelectedIssue {} => {
             let issue = call_gitlab(
                 &context,
                 account_id,
@@ -928,7 +928,7 @@ pub(crate) async fn handle_agent_rpc(
                 "updated_at": issue.get("updated_at").and_then(Value::as_str).unwrap_or_default(),
             }))
         }
-        GitLabAgentOperation::ReadSelectedIssueNotes => {
+        GitLabAgentOperation::ReadSelectedIssueNotes {} => {
             let mut notes_out = Vec::new();
             for page in 1..=1 {
                 let response = call_gitlab(
@@ -966,7 +966,7 @@ pub(crate) async fn handle_agent_rpc(
             }
             Ok(json!({"notes": notes_out}))
         }
-        GitLabAgentOperation::ReadLinkedMergeRequest => {
+        GitLabAgentOperation::ReadLinkedMergeRequest {} => {
             let tracked = tracked_merge_request(state, account_id, &context, issue_iid).await?;
             let merge_request_iid =
                 tracked.get("iid").and_then(Value::as_u64).ok_or_else(|| {
@@ -984,7 +984,7 @@ pub(crate) async fn handle_agent_rpc(
             .await?;
             Ok(sanitize_agent_merge_request(&merge_request, &context))
         }
-        GitLabAgentOperation::ReadLinkedMergeRequestDiscussions => {
+        GitLabAgentOperation::ReadLinkedMergeRequestDiscussions {} => {
             let merge_request =
                 tracked_merge_request(state, account_id, &context, issue_iid).await?;
             let merge_request_iid = merge_request
@@ -1039,7 +1039,7 @@ pub(crate) async fn handle_agent_rpc(
             }
             Ok(json!({"discussions": result}))
         }
-        GitLabAgentOperation::ReadProjectContext => {
+        GitLabAgentOperation::ReadProjectContext {} => {
             let project = call_gitlab(
                 &context,
                 account_id,
@@ -1064,7 +1064,7 @@ pub(crate) async fn handle_agent_rpc(
                 "git": git_context,
             }))
         }
-        GitLabAgentOperation::ProposeImplementationStart => {
+        GitLabAgentOperation::ProposeImplementationStart {} => {
             create_agent_proposal(
                 &context,
                 account_id,

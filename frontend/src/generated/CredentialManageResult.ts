@@ -2,8 +2,4 @@
 import type { CredentialEntryMetadata } from "./CredentialEntryMetadata";
 import type { CredentialProviderStatus } from "./CredentialProviderStatus";
 
-export type CredentialManageResult = {
-	status: CredentialProviderStatus;
-	entries: Array<CredentialEntryMetadata>;
-	code: string | null;
-};
+export type CredentialManageResult = { status: CredentialProviderStatus, entries: Array<CredentialEntryMetadata>, code: string | null, };

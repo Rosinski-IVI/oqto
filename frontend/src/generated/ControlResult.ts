@@ -5,13 +5,8 @@ import type { JsonValue } from "../../../backend/crates/oqto-protocol/bindings/s
 /**
  * Bounded authoritative acknowledgement; the outer envelope retains platform identity.
  */
-export type ControlResult = {
-	/**
-	 * Gateway-owned current connection/Session binding; never infer from a snapshot.
-	 */
-	binding_id: string;
-	request_id: string;
-	operation: ControlOperation;
-	native_session_id: string;
-	reply: JsonValue;
-};
+export type ControlResult = { 
+/**
+ * Gateway-owned current connection/Session binding; never infer from a snapshot.
+ */
+binding_id: string, request_id: string, operation: ControlOperation, native_session_id: string, reply: JsonValue, };
