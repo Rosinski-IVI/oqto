@@ -33,11 +33,6 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Set up QEMU (for arm64 cross-build)
-        uses: docker/setup-qemu-action@v3
-        with:
-          platforms: arm64
-
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
         with:
@@ -61,7 +56,9 @@ jobs:
           context: .
           file: deploy/docker/Dockerfile
           push: true
-          platforms: linux/amd64,linux/arm64
+          # The legacy all-in-one Dockerfile consumes x86_64-only Oqto release
+          # bundles. Keep this image amd64-only until it has a native ARM64 build.
+          platforms: linux/amd64
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
